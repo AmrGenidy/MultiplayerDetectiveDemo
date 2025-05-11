@@ -1,87 +1,119 @@
 package server;
 
-import common.dto.GameStateData;
+import common.dto.GameStateData; // The DTO that holds all saveable game state
+import common.SerializationUtils; // For basic object serialization to bytes
+
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.util.Objects;
 
-/**
- * PersistenceManager My dedicated class for handling all things saving and loading game progress.
- * It takes GameStateData DTOs and shoves them into files, then reads them back. Simple Java Object
- * Serialization is the magic here.
- */
 public class PersistenceManager {
-  private final String saveDirectoryPath; // Where do I put all these .sav files?
-  private final GameServer
-      server; // Need this mainly for logging, so I know what the manager is up to.
+    private final String saveDirectory;
+    private final GameServer server; // For logging
 
-  /**
-   * Sets up the PersistenceManager. It makes sure the save directory exists, or tries to create it.
-   *
-   * @param saveDirectoryPath The path (e.g., "saved_games") where save files will live.
-   * @param server Reference to the GameServer for logging.
-   */
-  public PersistenceManager(String saveDirectoryPath, GameServer server) {
-    Objects.requireNonNull(saveDirectoryPath, "Save directory path cannot be null.");
-    Objects.requireNonNull(server, "GameServer reference cannot be null.");
-
-    this.server = server;
-    this.saveDirectoryPath = saveDirectoryPath;
-    File dir = new File(this.saveDirectoryPath);
-
-    // Check and create the save directory if it doesn't exist.
-    if (!dir.exists()) {
-      if (dir.mkdirs()) { // mkdirs() creates parent dirs too, which is handy.
-        server.log("Persistence: Save directory created: " + this.saveDirectoryPath);
-      } else {
-        // This is a problem. If I can't make the dir, I can't save.
-        server.logError(
-            "Persistence ERROR: Could not create save directory: " + this.saveDirectoryPath, null);
-        // Could throw a RuntimeException here to halt server startup if saving is critical.
-      }
-    } else if (!dir.isDirectory()) {
-      // Path exists, but it's a file, not a directory. Also, a problem.
-      server.logError(
-          "Persistence ERROR: Save path '"
-              + this.saveDirectoryPath
-              + "' exists but is not a directory.",
-          null);
-      // Also a candidate for a startup-halting exception.
+    public PersistenceManager(String saveDirectory, GameServer server) {
+        this.server = server;
+        this.saveDirectory = saveDirectory;
+        File dir = new File(saveDirectory);
+        if (!dir.exists()) {
+            if (dir.mkdirs()) {
+                server.log("Save directory created: " + saveDirectory);
+            } else {
+                server.log("Error: Could not create save directory: " + saveDirectory);
+                // Potentially throw an exception or handle this more gracefully
+            }
+        } else if (!dir.isDirectory()) {
+            server.log("Error: Save path exists but is not a directory: " + saveDirectory);
+            // Handle error
+        }
     }
-  }
 
-  /**
-   * Saves the given game state to a file. Filename is based on the session ID from GameStateData
-   * (e.g., "session123.sav").
-   *
-   * @param gameState The GameStateData object to serialize and save.
-   * @throws IOException if anything goes wrong during file writing/serialization.
-   * @throws IllegalArgumentException if gameState or its sessionId is null/empty.
-   */
-  public void saveGame(GameStateData gameState) throws IOException {
-    if (gameState == null
-        || gameState.getSessionId() == null
-        || gameState.getSessionId().trim().isEmpty()) {
-      // Can't save without a session ID for the filename.
-      throw new IllegalArgumentException(
-          "GameStateData or its SessionId cannot be null/empty for saving.");
-    }
-    String filename = gameState.getSessionId().trim() + ".sav"; // Consistent naming.
-    File saveFile = new File(saveDirectoryPath, filename);
+    /**
+     * Saves the game state to a file.
+     * The filename is derived from the GameStateData's sessionId.
+     *
+     * @param gameState The GameStateData object to save.
+     * @throws IOException if an I/O error occurs during saving.
+     */
+    public void saveGame(GameStateData gameState) throws IOException {
+        if (gameState == null || gameState.getSessionId() == null || gameState.getSessionId().trim().isEmpty()) {
+            throw new IllegalArgumentException("GameStateData or its SessionId cannot be null/empty for saving.");
+        }
+        String filename = gameState.getSessionId() + ".sav";
+        File saveFile = new File(saveDirectory, filename);
 
-    // Using try-with-resources, so streams close automatically. Neat.
-    try (FileOutputStream fos = new FileOutputStream(saveFile);
-        ObjectOutputStream oos = new ObjectOutputStream(fos)) {
-      oos.writeObject(gameState); // The actual serialization magic.
-      server.log("Persistence: Game state saved: " + saveFile.getName());
-    } catch (IOException e) {
-      // Log the error, but also re-throw it so the caller (GameSessionManager or GameSession)
-      // knows something went wrong and can inform the user if needed.
-      server.logError(
-          "Persistence ERROR: Failed to save game state to " + saveFile.getAbsolutePath(), e);
-      throw e;
+        try (FileOutputStream fos = new FileOutputStream(saveFile);
+             ObjectOutputStream oos = new ObjectOutputStream(fos)) {
+            oos.writeObject(gameState);
+            server.log("Game state saved successfully: " + saveFile.getAbsolutePath());
+        } catch (IOException e) {
+            server.log("Error saving game state to " + saveFile.getAbsolutePath() + ": " + e.getMessage());
+            throw e; // Re-throw to allow caller to handle
+        }
     }
-  }
+
+    /**
+     * Loads game state from a file.
+     *
+     * @param sessionId The ID of the session to load.
+     * @return The loaded GameStateData object, or null if the file doesn't exist or an error occurs.
+     */
+    public GameStateData loadGame(String sessionId) {
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            server.log("Error: SessionId cannot be null or empty for loading.");
+            return null;
+        }
+        String filename = sessionId + ".sav";
+        File saveFile = new File(saveDirectory, filename);
+
+        if (!saveFile.exists() || !saveFile.isFile()) {
+            server.log("No save file found for session ID: " + sessionId + " at " + saveFile.getAbsolutePath());
+            return null;
+        }
+
+        try (FileInputStream fis = new FileInputStream(saveFile);
+             ObjectInputStream ois = new ObjectInputStream(fis)) {
+            Object loadedObject = ois.readObject();
+            if (loadedObject instanceof GameStateData) {
+                server.log("Game state loaded successfully: " + saveFile.getAbsolutePath());
+                return (GameStateData) loadedObject;
+            } else {
+                server.log("Error: Loaded file " + saveFile.getAbsolutePath() + " does not contain valid GameStateData.");
+                return null;
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            server.log("Error loading game state from " + saveFile.getAbsolutePath() + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Deletes a save file for a given session ID.
+     * @param sessionId The ID of the session whose save file should be deleted.
+     * @return true if the file was successfully deleted or did not exist, false otherwise.
+     */
+    public boolean deleteSaveGame(String sessionId) {
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            server.log("Error: SessionId cannot be null or empty for deleting save data.");
+            return false;
+        }
+        String filename = sessionId + ".sav";
+        File saveFile = new File(saveDirectory, filename);
+
+        if (!saveFile.exists()) {
+            server.log("No save file to delete for session ID: " + sessionId);
+            return true; // Considered success if no file to delete
+        }
+
+        if (saveFile.delete()) {
+            server.log("Save file deleted successfully: " + saveFile.getAbsolutePath());
+            return true;
+        } else {
+            server.log("Error: Could not delete save file: " + saveFile.getAbsolutePath());
+            return false;
+        }
+    }
 }

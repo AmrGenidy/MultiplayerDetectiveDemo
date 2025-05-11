@@ -1,281 +1,278 @@
 package singleplayer;
 
-// My utility imports
-import JsonDTO.CaseFile;
+import singleplayer.util.CaseFileUtil;
+import singleplayer.util.CommandParserSinglePlayer; // Assuming you have these
+import singleplayer.util.CommandFactorySinglePlayer; // Assuming you have these
 import common.commands.Command;
+import common.dto.ExamQuestionDTO;
 import common.commands.SubmitExamAnswerCommand;
-import extractors.BuildingExtractor;
+import JsonDTO.CaseFile;
 import extractors.CaseLoader;
+import extractors.BuildingExtractor;
 import extractors.GameObjectExtractor;
 import extractors.SuspectExtractor;
+// import common.commands.AddCaseCommand; // If using the static method approach for SP
+
 import java.util.List;
 import java.util.Scanner;
-import singleplayer.util.CaseFileUtil;
-import singleplayer.util.CommandFactorySinglePlayer;
-import singleplayer.util.CommandParserSinglePlayer;
 
-/**
- * SinglePlayerMain This class runs the whole single-player game experience. It manages the main
- * game loop, case selection, playing a case, and user input.
- */
 public class SinglePlayerMain {
 
-  // Constants
-  public static final String CASES_DIRECTORY = "cases"; // Default place for my case files.
-  private static final int MENU_WIDTH = 90;
-  private static final String BORDER_CHAR = "═";
-  private static final String CORNER_TL = "╔"; /* ... and other border chars ... */
-  private static final String CORNER_TR = "╗";
-  private static final String CORNER_BL = "╚";
-  private static final String CORNER_BR = "╝";
-  private static final String SIDE_BORDER = "║";
-  private static final String T_LEFT = "╠";
-  private static final String T_RIGHT = "╣";
-  private static final String DIVIDER = T_LEFT + BORDER_CHAR.repeat(MENU_WIDTH) + T_RIGHT;
-  private static final String TOP_BORDER = CORNER_TL + BORDER_CHAR.repeat(MENU_WIDTH) + CORNER_TR;
-  private static final String BOTTOM_BORDER =
-      CORNER_BL + BORDER_CHAR.repeat(MENU_WIDTH) + CORNER_BR;
+    public static final String CASES_DIRECTORY = "cases";
+    private GameContextSinglePlayer gameContext;
+    private Scanner scanner;
 
-  // My game state and input
-  private GameContextSinglePlayer gameContext;
-  private Scanner scanner; // For reading user input.
+    // Constants for menu formatting
+    private static final int MENU_WIDTH = 90; // Adjust width as needed
+    private static final String BORDER_CHAR = "═";
+    private static final String CORNER_TL = "╔";
+    private static final String CORNER_TR = "╗";
+    private static final String CORNER_BL = "╚";
+    private static final String CORNER_BR = "╝";
+    private static final String SIDE_BORDER = "║";
+    private static final String T_LEFT = "╠";
+    private static final String T_RIGHT = "╣";
+    private static final String DIVIDER = T_LEFT + BORDER_CHAR.repeat(MENU_WIDTH) + T_RIGHT;
+    private static final String TOP_BORDER = CORNER_TL + BORDER_CHAR.repeat(MENU_WIDTH) + CORNER_TR;
+    private static final String BOTTOM_BORDER = CORNER_BL + BORDER_CHAR.repeat(MENU_WIDTH) + CORNER_BR;
 
-  public SinglePlayerMain() {
-    this.gameContext = new GameContextSinglePlayer(); // My SP game brain.
-    this.scanner = new Scanner(System.in); // Read from standard console.
-  }
 
-  /** Main game loop: allows selecting and playing multiple cases until user quits. */
-  public void runGame() {
-    // System.out.println("Welcome to the Single Player Detective Game!"); // MainLauncher shows
-    // this.
+    public SinglePlayerMain() {
+        this.gameContext = new GameContextSinglePlayer();
+        this.scanner = new Scanner(System.in);
+    }
 
-    while (!gameContext.wantsToExitApplication()) {
-      gameContext.resetExitFlags(); // Fresh start for exit decisions.
-      displayCaseSelectionMenu(); // Show pretty menu.
-      CaseFile selectedCase = selectCase(); // Let user pick or add/quit.
+    public void runGame() {
+        System.out.println("Welcome to the Single Player Detective Game!");
 
-      if (selectedCase == null) { // Means user chose to quit or add case.
-        if (gameContext.wantsToExitApplication()) {
-          break; // Break from while loop to exit runGame().
+        while (!gameContext.wantsToExitApplication()) {
+            gameContext.resetExitFlags();
+            displayCaseSelectionMenu(); // Display the formatted menu
+            CaseFile selectedCase = selectCase(); // Get user choice
+
+            if (selectedCase == null) {
+                if (gameContext.wantsToExitApplication()) break;
+                // If selectCase returns null without setting exit, it means 'add case' was chosen
+                // and handled, so we just loop back to display the menu again.
+                continue;
+            }
+
+            // Proceed to play the selected case
+            initializeAndPlayCase(selectedCase);
         }
-        // If not exiting app, it was 'add case', so just 'continue' to refresh menu.
-        continue;
-      }
-      // If a case was selected, initialize and play it.
-      initializeAndPlayCase(selectedCase);
+        System.out.println("Thank you for playing. Goodbye!");
+        // Avoid closing System.in scanner here if MainLauncher is used
+        // scanner.close();
     }
-    System.out.println("\nThank you for playing Single Player. Goodbye!");
-    // Don't close 'this.scanner' if it wraps System.in and MainLauncher might use System.in later.
-  }
 
-  /** Displays the formatted case selection menu. */
-  private void displayCaseSelectionMenu() {
-    List<CaseFile> cases = CaseLoader.loadCases(CASES_DIRECTORY); // Get current cases.
+    // --- MODIFIED MENU DISPLAY ---
+    private void displayCaseSelectionMenu() {
+        List<CaseFile> cases = CaseLoader.loadCases(CASES_DIRECTORY);
 
-    System.out.println("\n" + TOP_BORDER);
-    String title = "SELECT A CASE TO INVESTIGATE";
-    int padding = (MENU_WIDTH - title.length()) / 2;
-    System.out.println(
-        SIDE_BORDER
-            + " ".repeat(Math.max(0, padding))
-            + title
-            + " ".repeat(Math.max(0, MENU_WIDTH - title.length() - padding))
-            + SIDE_BORDER);
-    System.out.println(DIVIDER);
+        System.out.println("\n" + TOP_BORDER);
+        // Center the title (approximate)
+        String title = "SELECT A CASE TO INVESTIGATE";
+        int padding = (MENU_WIDTH - title.length()) / 2;
+        System.out.println(SIDE_BORDER + " ".repeat(padding) + title + " ".repeat(MENU_WIDTH - title.length() - padding) + SIDE_BORDER);
+        System.out.println(DIVIDER);
 
-    if (cases.isEmpty()) {
-      String noCasesMsg =
-          "No cases found in '" + CASES_DIRECTORY + "'. Use 'add case [path]' or 'quit'.";
-      int msgPadding = (MENU_WIDTH - noCasesMsg.length()) / 2;
-      System.out.printf(
-          "%s %-" + MENU_WIDTH + "s %s%n",
-          SIDE_BORDER,
-          " ".repeat(Math.max(0, msgPadding)) + noCasesMsg,
-          SIDE_BORDER);
-    } else {
-      for (int i = 0; i < cases.size(); i++) {
-        String caseLine = String.format("%d. %s", i + 1, cases.get(i).getTitle());
-        System.out.printf("%s %-" + MENU_WIDTH + "s %s%n", SIDE_BORDER, caseLine, SIDE_BORDER);
-      }
-    }
-    System.out.println(BOTTOM_BORDER);
-  }
-
-  /**
-   * Handles user input for selecting a case, adding a new case, or quitting.
-   *
-   * @return The selected CaseFile, or null if user quits or chose 'add case'.
-   */
-  private CaseFile selectCase() {
-    List<CaseFile> cases = CaseLoader.loadCases(CASES_DIRECTORY); // Get up-to-date list.
-    while (true) {
-      System.out.print("Enter case number (0 to add case, 'quit' to exit game): ");
-      String input = scanner.nextLine().trim();
-
-      if (input.equalsIgnoreCase("quit") || input.equalsIgnoreCase("q")) {
-        // Tell context player wants to fully exit the application.
-        gameContext.handlePlayerExitRequest(gameContext.getPlayerDetective(null).getPlayerId());
-        return null;
-      }
-
-      if (input.equals("0") || input.toLowerCase().startsWith("add case")) {
-        handleAddingCase(input); // Let helper method do the add logic.
-        return null; // Return null to signal main loop to re-display menu.
-      }
-
-      try {
-        int choice = Integer.parseInt(input);
-        if (choice > 0 && choice <= cases.size()) {
-          return cases.get(choice - 1); // Valid case number selected.
+        if (cases.isEmpty()) {
+            String noCasesMsg = "No cases available in '" + CASES_DIRECTORY + "'. Use 'add case [path]' or 'quit'.";
+            int msgPadding = (MENU_WIDTH - noCasesMsg.length()) / 2;
+            if (msgPadding < 0) msgPadding = 0; // prevent negative padding
+            System.out.printf("%s %-" + MENU_WIDTH + "s %s%n", SIDE_BORDER, " ".repeat(msgPadding) + noCasesMsg, SIDE_BORDER);
         } else {
-          System.out.println("Invalid choice. Not in the list.");
+            for (int i = 0; i < cases.size(); i++) {
+                String caseLine = String.format("%d. %s", i + 1, cases.get(i).getTitle());
+                // Pad the line to fit the width
+                System.out.printf("%s %-" + MENU_WIDTH + "s %s%n", SIDE_BORDER, caseLine, SIDE_BORDER);
+            }
         }
-      } catch (NumberFormatException e) {
-        System.out.println(
-            "Invalid input. Please enter a number, or a command like 'add case ...' or 'quit'.");
-      }
-    }
-  }
-
-  /**
-   * Handles the logic for adding a new case file via user input. Calls CaseFileUtil to perform the
-   * actual file operations.
-   */
-  private void handleAddingCase(String initialInput) {
-    String filePath = "";
-    // Extract filepath if provided with "add case filepath"
-    if (initialInput.toLowerCase().startsWith("add case")) {
-      if (initialInput.length() > "add case ".length()) {
-        filePath = initialInput.substring("add case ".length()).trim();
-      }
-    }
-    // If input was "0" or just "add case", prompt for path.
-    if (filePath.isEmpty()) {
-      System.out.print("Enter the full file path to the case JSON: ");
-      filePath = scanner.nextLine().trim();
-      if (filePath.isEmpty()) {
-        System.out.println("Add case cancelled: No file path provided.");
-        return; // User cancelled by providing no path.
-      }
+        System.out.println(BOTTOM_BORDER);
     }
 
-    // Call my utility to do the heavy lifting for adding the file.
-    // CaseFileUtil will print its own success/error messages.
-    CaseFileUtil.addCaseFromFile(filePath);
-  }
+    // --- MODIFIED PROMPT ---
+    private CaseFile selectCase() {
+        List<CaseFile> cases = CaseLoader.loadCases(CASES_DIRECTORY); // Reload just in case add case worked
+        while (true) {
+            // Adjusted prompt to match desired output
+            System.out.print("Enter case number (0 to add case, 'quit' to exit game): ");
+            String input = scanner.nextLine().trim();
 
-  /** Initializes the game context for a selected case and starts the play loop for it. */
-  private void initializeAndPlayCase(CaseFile caseFile) {
-    if (caseFile == null) return;
+            if (input.equalsIgnoreCase("quit") || input.equalsIgnoreCase("q")) {
+                gameContext.handlePlayerExitRequest(gameContext.getPlayerDetective(null).getPlayerId());
+                return null; // Signal exit application
+            }
 
-    System.out.println("\nLoading case: " + caseFile.getTitle() + "...");
-    gameContext.resetForNewCaseLoad(); // Reset context for the new case.
+            if (input.equals("0") || input.toLowerCase().startsWith("add case")) {
+                handleAddingCase(input);
+                return null; // Signal to loop back and redisplay menu after adding
+            }
 
-    boolean loadingSuccess = true;
-    try {
-      // Use my extractors to populate the game context.
-      if (!BuildingExtractor.loadBuilding(caseFile, gameContext)) {
-        System.out.println("Error: Failed to load building from case file.");
-        loadingSuccess = false;
-      } else {
-        GameObjectExtractor.loadObjects(caseFile, gameContext);
-        SuspectExtractor.loadSuspects(caseFile, gameContext);
-      }
-    } catch (Exception e) { // Catch any unexpected error during extraction.
-      System.out.println(
-          "CRITICAL_LOAD_ERROR for '" + caseFile.getTitle() + "': " + e.getMessage());
-      e.printStackTrace(); // Important for dev to see what went wrong.
-      loadingSuccess = false;
+            try {
+                int choice = Integer.parseInt(input);
+                if (choice > 0 && choice <= cases.size()) {
+                    return cases.get(choice - 1); // Return the selected case DTO
+                } else if (choice == 0) { // User typed 0 directly after menu display
+                    handleAddingCase("0"); // Treat 0 as triggering the add case flow
+                    return null; // Signal to loop back and redisplay menu
+                } else {
+                    System.out.println("Invalid choice. Please select a valid number from the list, 0, or 'quit'.");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid input. Please enter a number, 0, 'add case [path]', or 'quit'.");
+            }
+        }
     }
 
-    if (!loadingSuccess) {
-      System.out.println(
-          "Failed to load case '"
-              + caseFile.getTitle()
-              + "' completely. Returning to case selection.");
-      return;
+    // Helper method to handle the add case logic
+    private void handleAddingCase(String input) {
+        String filePath = "";
+        if (input.toLowerCase().startsWith("add case")) {
+            if (input.length() > "add case ".length()) {
+                filePath = input.substring("add case ".length()).trim();
+            }
+        }
+        // If input was "0" or "add case" without path, prompt for path
+        if (filePath.isEmpty()) {
+            System.out.print("Enter the full file path to the case JSON: ");
+            filePath = scanner.nextLine().trim();
+            if (filePath.isEmpty()) {
+                System.out.println("Add case cancelled: No file path provided.");
+                return; // Cancelled add case
+            }
+        }
+
+        // --- Call the ACTUAL Add Case Logic ---
+        try {
+            System.out.println("Attempting to add case from: " + filePath);
+
+            // *** REPLACE SIMULATION WITH ACTUAL CALL ***
+            // Assuming CaseFileUtil has the static methods from your original AddCaseCommand
+            CaseFileUtil.addCaseFromFile(filePath);
+            // The addCaseFromFile method itself prints success/error messages.
+            // If it doesn't, you can add a generic success message here,
+            // but it's better if the utility handles its own detailed feedback.
+
+            // System.out.println("Case added successfully. The menu will refresh."); // This might be redundant if addCaseFromFile prints success
+
+        } catch (Exception e) { // Catch any exceptions from addCaseFromFile
+            System.out.println("Error adding case: " + e.getMessage());
+            // Optionally print stack trace for debugging if addCaseFromFile doesn't.
+            // e.printStackTrace();
+        }
+        // No need to manually redisplay menu here;
+        // selectCase returning null triggers loop in runGame() which calls displayCaseSelectionMenu()
     }
 
-    // Final context setup with case data.
-    gameContext.initializeNewCase(caseFile, caseFile.getStartingRoom());
 
-    // Display the case intro.
-    System.out.println("\n--- Case Invitation ---");
-    System.out.println(caseFile.getInvitation());
-    System.out.println("\nType 'start case' to begin, or 'exit' to return to case selection.");
+    private void initializeAndPlayCase(CaseFile caseFile) {
+        if (caseFile == null) return; // Should not happen if called correctly
 
-    playCurrentCase(); // Enter the main gameplay loop for this case.
-  }
+        System.out.println("\nLoading case: " + caseFile.getTitle() + "...");
+        gameContext.resetForNewCaseLoad(); // Use a method in GameContextSinglePlayer to reset state
 
-  /**
-   * The main gameplay loop for an active case. Handles player input, command execution, and exam
-   * Q&A flow.
-   */
-  private void playCurrentCase() {
-    while (!gameContext.wantsToExitToCaseSelection() && !gameContext.wantsToExitApplication()) {
-      String prompt = "> "; // Default prompt.
-      if (gameContext.isAwaitingExamAnswer()) {
-        prompt = ""; // No extra prompt char when answering exam question.
-      } else if (gameContext.isCaseStarted() && gameContext.getCurrentRoomForPlayer(null) != null) {
-        prompt = "<" + gameContext.getCurrentRoomForPlayer(null).getName() + "> ";
-      }
+        // --- Use Extractors ---
+        boolean success = true;
+        try {
+            if (!BuildingExtractor.loadBuilding(caseFile, gameContext)) {
+                System.out.println("Error: Failed to load building."); success = false;
+            } else {
+                GameObjectExtractor.loadObjects(caseFile, gameContext);
+                SuspectExtractor.loadSuspects(caseFile, gameContext);
+            }
+        } catch (Exception e) {
+            System.out.println("An critical error occurred during case loading for '" + caseFile.getTitle() + "': " + e.getMessage());
+            e.printStackTrace(); // Log details for debugging
+            success = false;
+        }
 
-      if (!prompt.isEmpty()) System.out.print(prompt);
+        if (!success) {
+            System.out.println("Failed to load case '" + caseFile.getTitle() + "' completely. Returning to case selection.");
+            return;
+        }
 
-      String input = scanner.nextLine().trim();
-      if (input.isEmpty()) continue; // Ignore empty lines.
+        // Initialize the rest of the game context with the loaded case data
+        gameContext.initializeNewCase(caseFile, caseFile.getStartingRoom());
 
-      Command commandToExecute;
-      if (gameContext.isAwaitingExamAnswer()) {
-        // If answering exam, input is the answer. Directly create SubmitExamAnswerCommand.
-        commandToExecute =
-            new SubmitExamAnswerCommand(
-                gameContext.getAwaitingQuestionNumber(), // Context knows which question.
-                input // Raw input is the answer.
+        System.out.println("\n--- Case Invitation ---");
+        System.out.println(caseFile.getInvitation());
+        System.out.println("\nType 'start case' to begin the investigation, or 'exit' to return to case selection.");
+
+        // --- In-Case Game Loop ---
+        playCurrentCase(); // Encapsulate the inner loop
+
+    }
+
+    private void playCurrentCase() {
+        while (!gameContext.wantsToExitToCaseSelection() && !gameContext.wantsToExitApplication()) {
+            String prompt = "> "; // Default prompt
+            if (gameContext.isCaseStarted() && gameContext.getCurrentRoomForPlayer(null) != null && !gameContext.isAwaitingExamAnswer()) {
+                prompt = "<" + gameContext.getCurrentRoomForPlayer(null).getName() + "> ";
+            } else if (gameContext.isAwaitingExamAnswer()){
+                // No prompt needed here, the question displayed by context acts as prompt
+                prompt = ""; // Empty prompt
+            }
+
+            if (!prompt.isEmpty()) System.out.print(prompt); // Print prompt only if needed
+
+            String input = scanner.nextLine().trim();
+            if (input.isEmpty()) continue;
+
+            Command commandToExecute = null;
+
+            if (gameContext.isAwaitingExamAnswer()) {
+                commandToExecute = new SubmitExamAnswerCommand(
+                        gameContext.getAwaitingQuestionNumber(),
+                        input
                 );
-      } else {
-        // Standard command parsing.
-        String[] parsedInput = CommandParserSinglePlayer.parseInputSimple(input);
-        commandToExecute = CommandFactorySinglePlayer.createCommand(parsedInput);
-      }
+            } else {
+                // Use your single player parser and factory
+                // Adapt based on whether your SP factory expects String[] or ParsedCommandData
+                String[] parsedInput = CommandParserSinglePlayer.parseInputSimple(input); // Assuming this exists
+                commandToExecute = CommandFactorySinglePlayer.createCommand(parsedInput); // Assuming this exists
+            }
 
-      if (commandToExecute != null) {
-        if (gameContext.getPlayerDetective(null) != null) { // Make sure detective is there.
-          commandToExecute.setPlayerId(gameContext.getPlayerDetective(null).getPlayerId());
-          commandToExecute.execute(gameContext); // Execute command using SP context.
-        } else {
-          System.out.println("SP_ERROR: Player detective not initialized. Cannot execute command.");
+            if (commandToExecute != null) {
+                // Common command interface requires player ID, get it from SP context
+                if(gameContext.getPlayerDetective(null) != null) { // Check if detective is initialized
+                    commandToExecute.setPlayerId(gameContext.getPlayerDetective(null).getPlayerId());
+                    commandToExecute.execute(gameContext);
+                } else {
+                    System.out.println("Error: Player context not initialized.");
+                    // This indicates an issue in initializeNewCase or context state.
+                }
+            } else {
+                // Only print unknown command if not awaiting exam answer
+                if(!gameContext.isAwaitingExamAnswer()) {
+                    System.out.println("Unknown command. Type 'help' for available commands.");
+                } else {
+                    // If awaiting exam answer and command was null, maybe re-prompt?
+                    System.out.println("Invalid input format for exam answer. Please just type your answer.");
+                }
+            }
+        } // End of in-case game loop
+
+        // Handle exit reason
+        if (gameContext.wantsToExitToCaseSelection()) {
+            if (gameContext.isCaseStarted()) {
+                gameContext.setCaseStarted(false); // Ensure case state is reset
+            }
+            System.out.println("\nReturning to case selection menu...");
         }
-      } else {
-        // Only show "Unknown command" if not in exam Q&A.
-        if (!gameContext.isAwaitingExamAnswer()) {
-          System.out.println("Unknown command. Type 'help' for available commands.");
-        } else {
-          // If awaiting exam answer and command was null (shouldn't happen with direct creation).
-          System.out.println("Please type your answer for the question.");
+    }
+
+
+    public static void main(String[] args) {
+        // System.out.println("Starting Detective Game - Single Player Mode..."); // Header moved to MainLauncher
+        SinglePlayerMain game = new SinglePlayerMain();
+        try {
+            game.runGame(); // This method blocks until the single player game is exited
+        } catch (Exception e) {
+            System.err.println("\nAn unexpected error occurred in the single player game:");
+            e.printStackTrace();
+            System.err.println("Exiting application due to error.");
         }
-      }
-    } // End of in-case loop.
-
-    // After loop, if exiting to case selection, print message.
-    if (gameContext.wantsToExitToCaseSelection()) {
-      if (gameContext.isCaseStarted()) { // Ensure case flag is reset.
-        gameContext.setCaseStarted(false);
-      }
-      System.out.println("\nReturning to case selection menu...");
+        // System.out.println("Exiting Single Player Mode..."); // Header moved to MainLauncher
     }
-  }
-
-  /** Entry point for running the Single Player game directly. */
-  public static void main(String[] args) {
-    SinglePlayerMain game = new SinglePlayerMain();
-    try {
-      game.runGame();
-    } catch (Exception e) { // Catch-all for the main game flow.
-      System.err.println("\nUNEXPECTED SP_ERROR: An unhandled error occurred in SinglePlayerMain:");
-      e.printStackTrace();
-      System.err.println("Application will now exit.");
-    }
-  }
 }

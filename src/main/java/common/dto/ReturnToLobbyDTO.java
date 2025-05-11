@@ -1,17 +1,16 @@
 package common.dto;
 
-import java.io.Serial;
 import java.io.Serializable;
 
 public class ReturnToLobbyDTO implements Serializable {
-  @Serial private static final long serialVersionUID = 1L;
-  private final String message;
+    private static final long serialVersionUID = 1L;
+    private final String message;
 
-  public ReturnToLobbyDTO(String message) {
-    this.message = message;
-  }
+    public ReturnToLobbyDTO(String message) {
+        this.message = message;
+    }
 
-  public String getMessage() {
-    return message;
-  }
+    public String getMessage() {
+        return message;
+    }
 }
