@@ -1,56 +1,65 @@
 package common.interfaces;
 
-import Core.Room; // Assuming Room is in 'core' package
-import Core.Suspect; // Assuming Suspect is in 'core' package
+import Core.Room;
+import Core.Suspect;
 import java.util.Map;
 
 /**
- * Defines methods needed by Extractors (server-side and single-player)
- * for loading case data into a game context.
+ * GameContext This interface is all about what the *Extractors* need when they're loading a case
+ * from a JSON file. Think of it as the "setup phase" context. It allows adding rooms and suspects,
+ * and getting them by name, plus some logging. Both my SinglePlayer and Server contexts will
+ * implement this.
  */
 public interface GameContext {
-    /**
-     * Adds a room to the game context.
-     *
-     * @param room The Room object to add.
-     */
-    void addRoom(Room room);
 
-    /**
-     * Retrieves a room by its name.
-     *
-     * @param name The name of the room.
-     * @return The Room object if found, null otherwise.
-     */
-    Room getRoomByName(String name);
+  /**
+   * Adds a created Room object to this game context. The extractor will call this after parsing
+   * room data from the JSON.
+   *
+   * @param room The fully instantiated Room object to add.
+   */
+  void addRoom(Room room);
 
-    /**
-     * Retrieves all rooms currently loaded in the context.
-     * Primarily for validation purposes like connectivity checks.
-     *
-     * @return A map of room names to Room objects.
-     */
-    Map<String, Room> getAllRooms();
+  /**
+   * Fetches a previously added Room object by its unique name. Extractors (like BuildingExtractor
+   * when linking neighbors) will use this.
+   *
+   * @param name The name of the room (should be case-insensitive in implementations).
+   * @return The Room object if it exists in the context, otherwise null.
+   */
+  Room getRoomByName(String name);
 
-    /**
-     * Adds a suspect to the game context.
-     *
-     * @param suspect The Suspect object to add.
-     */
-    void addSuspect(Suspect suspect);
+  /**
+   * Provides access to all rooms currently loaded in the context. Useful for things like building
+   * connectivity validation after all rooms are added.
+   *
+   * @return An unmodifiable Map of room names (keys) to Room objects (values). Implementations
+   *     should return a copy or unmodifiable view.
+   */
+  Map<String, Room> getAllRooms();
 
-    /**
-     * Logs a message related to the data loading process.
-     *
-     * @param message The message to log.
-     */
-    void logLoadingMessage(String message);
+  /**
+   * Adds a created Suspect object to this game context. The SuspectExtractor will call this after
+   * parsing suspect data.
+   *
+   * @param suspect The fully instantiated Suspect object to add.
+   */
+  void addSuspect(Suspect suspect);
 
-    /**
-     * Gets an identifier for the current context, useful for logging.
-     * e.g., "Server-Session-XYZ" or "SinglePlayer-Game1".
-     *
-     * @return A string identifier for the context.
-     */
-    String getContextIdForLog();
+  /**
+   * For logging messages specifically during the case loading/extraction phase. Helps me debug if a
+   * case JSON has issues.
+   *
+   * @param message The informational or error message related to loading.
+   */
+  void logLoadingMessage(String message);
+
+  /**
+   * Gets a unique identifier for this specific context instance. Super useful for prefixing log
+   * messages to know if it's from SP, or which server session, especially when looking at combined
+   * logs.
+   *
+   * @return A String like "SinglePlayer" or "ServerSession-123xyz".
+   */
+  String getContextIdForLog();
 }

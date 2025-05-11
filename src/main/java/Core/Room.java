@@ -1,24 +1,31 @@
-package Core; // Assuming 'core' is the package name
+package Core;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
-import java.io.Serializable; // Added for potential serialization if Room objects are ever directly sent/saved
 
-public class Room implements Serializable { // Made concrete and Serializable
-  private static final long serialVersionUID = 1L; // For Serializable
-
-  // Changed to private, accessible via getters.
-  // 'name' can be final if set only at construction and never changed.
+public class Room implements Serializable {
+  // Name is final, set once. Good. Description can change if needed.
   private final String name;
   private String description;
-  protected Map<String, Room> neighbors = new HashMap<>();
-  protected Map<String, GameObject> objects = new HashMap<>();
+  // Using protected so subclasses (if I ever make them for special rooms) can directly access,
+  // but generally, I'll use the public methods.
+  protected Map<String, Room> neighbors = new HashMap<>(); // Direction (lowercase) -> Neighbor Room
+  protected Map<String, GameObject> objects =
+      new HashMap<>(); // Object Name (lowercase) -> GameObject
 
+  /**
+   * My main constructor for a Room.
+   *
+   * @param name The unique name of this room. Can't be null or empty, obviously.
+   * @param description The text description players see when they enter or look.
+   */
   public Room(String name, String description) {
     if (name == null || name.trim().isEmpty()) {
+      // Don't want rooms without names, that'd be a mess.
       throw new IllegalArgumentException("Room name cannot be null or empty.");
     }
-    this.name = name;
+    this.name = name.trim(); // Trim it just in case.
     this.description = description;
   }
 
@@ -30,113 +37,122 @@ public class Room implements Serializable { // Made concrete and Serializable
     return description;
   }
 
-  public void setDescription(String description) { // Added setter if description can change
+  /**
+   * Allows changing the room's description dynamically if the game needs it.
+   *
+   * @param description The new description text.
+   */
+  public void setDescription(String description) {
     this.description = description;
   }
 
+  /**
+   * Gets a map of neighboring rooms.
+   *
+   * @return A new Map instance to prevent external modification of my internal neighbors map.
+   */
   public Map<String, Room> getNeighbors() {
-    return new HashMap<>(neighbors); // Return a copy to prevent external modification
-  }
-
-  public void setNeighbor(String direction, Room neighbor) {
-    if (direction == null || direction.trim().isEmpty() || neighbor == null) {
-      // Or throw IllegalArgumentException
-      System.err.println("Invalid direction or neighbor for setNeighbor.");
-      return;
-    }
-    neighbors.put(direction.toLowerCase(), neighbor);
-  }
-
-  public Room getNeighbor(String direction) {
-    if (direction == null) return null;
-    return neighbors.get(direction.toLowerCase());
-  }
-
-  public GameObject getObject(String objectName) {
-    if (objectName == null) return null;
-    return objects.get(objectName.toLowerCase());
-  }
-
-  public void addObject(GameObject object) { // Changed to take GameObject directly
-    if (object == null || object.getName() == null || object.getName().trim().isEmpty()) {
-      // Or throw IllegalArgumentException
-      System.err.println("Invalid object or object name for addObject.");
-      return;
-    }
-    objects.put(object.getName().toLowerCase(), object);
-  }
-
-  public Map<String, GameObject> getObjects() {
-    return new HashMap<>(objects); // Return a copy
-  }
-
-  public String getExitsDescription() {
-    if (neighbors.isEmpty()) {
-      return "Exits: None";
-    }
-    StringBuilder sb = new StringBuilder("Exits: ");
-    // Using stream for a slightly more modern approach, but for-each is fine too
-    neighbors.forEach((direction, room) -> sb.append(direction).append(" (").append(room.getName()).append("), "));
-    if (sb.length() > "Exits: ".length()) {
-      sb.setLength(sb.length() - 2); // Remove trailing comma and space
-    }
-    return sb.toString();
-  }
-
-  public String getObjectsDescription() {
-    if (objects.isEmpty()) {
-      return "Objects present: None"; // Changed for consistency
-    }
-    StringBuilder sb = new StringBuilder("Objects present: ");
-    objects.values().forEach(obj -> sb.append(obj.getName()).append(", "));
-    if (sb.length() > "Objects present: ".length()) {
-      sb.setLength(sb.length() - 2); // Remove trailing comma and space
-    }
-    return sb.toString();
+    // Always return a copy. Don't want anyone messing with my internal map directly.
+    return new HashMap<>(neighbors);
   }
 
   /**
-   * Examines an object in the room.
-   * Note: This logic might be better handled entirely within an ExamineCommand
-   * to keep Room focused on state. For now, it provides basic functionality.
-   * The command would call room.getObject(objectName) and then obj.getExamine().
+   * Sets a neighbor in a specific direction. Direction is stored as lowercase.
    *
-   * @param objectName The name of the object to examine.
-   * @return A string describing the examination, or a message if the object isn't found.
+   * @param direction The direction (e.g., "north", "south").
+   * @param neighbor The Room object that is the neighbor.
    */
-  public String examineObject(String objectName) {
-    GameObject obj = getObject(objectName);
-    if (obj != null) {
-      String examineText = obj.getExamine();
-      if (examineText != null && !examineText.isEmpty()) {
-        return "You examine the " + obj.getName() + ": " + examineText;
-      }
-      // Fallback to description if no specific examine text
-      return "You examine the " + obj.getName() + ": " + obj.getDescription();
+  public void setNeighbor(String direction, Room neighbor) {
+    if (direction == null || direction.trim().isEmpty() || neighbor == null) {
+      // Basic check, probably log this error instead of just System.err if it was a bigger app.
+      System.err.println(
+          "ROOM_ERROR: Invalid direction or null neighbor for setNeighbor in room '"
+              + this.name
+              + "'.");
+      return;
     }
-    return "There is no '" + objectName + "' to examine here.";
+    neighbors.put(direction.trim().toLowerCase(), neighbor);
   }
 
-  // Override equals and hashCode if rooms are stored in Sets or as Map keys
-  // based on their name, for example.
+  /**
+   * Gets the neighboring room in a given direction.
+   *
+   * @param direction The direction to check (case-insensitive).
+   * @return The neighboring Room, or null if no exit in that direction.
+   */
+  public Room getNeighbor(String direction) {
+    if (direction == null) return null;
+    return neighbors.get(direction.trim().toLowerCase());
+  }
+
+  /**
+   * Retrieves a specific GameObject from this room by its name.
+   *
+   * @param objectName The name of the object (case-insensitive).
+   * @return The GameObject, or null if not found.
+   */
+  public GameObject getObject(String objectName) {
+    if (objectName == null) return null;
+    return objects.get(objectName.trim().toLowerCase());
+  }
+
+  /**
+   * Adds a GameObject to this room. The object's name (converted to lowercase) is used as the key.
+   *
+   * @param object The GameObject to add.
+   */
+  public void addObject(GameObject object) {
+    if (object == null || object.getName() == null || object.getName().trim().isEmpty()) {
+      System.err.println(
+          "ROOM_ERROR: Invalid object (null or no name) for addObject in room '"
+              + this.name
+              + "'.");
+      return;
+    }
+    // Store object by its name, lowercase, for easy lookup.
+    objects.put(object.getName().trim().toLowerCase(), object);
+  }
+
+  /**
+   * Gets all GameObjects present in this room.
+   *
+   * @return A new Map instance to prevent external modification of my internal objects map.
+   */
+  public Map<String, GameObject> getObjects() {
+    // Defensive copy again. Good habit.
+    return new HashMap<>(objects);
+  }
+
+  // Standard equals and hashCode based on the room's 'name'.
+  // This is important if I store Room objects in Sets or use them as keys in Maps
+  // where uniqueness is determined by name.
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     Room room = (Room) o;
-    return name.equals(room.name);
+    return name.equals(room.name); // Names are unique identifiers for rooms.
   }
 
   @Override
   public int hashCode() {
-    return name.hashCode();
+    return name.hashCode(); // Consistent with equals.
   }
 
+  /**
+   * Simple toString for debugging or logging Room objects.
+   *
+   * @return String representation of the room.
+   */
   @Override
   public String toString() {
-    return "Room{" +
-            "name='" + name + '\'' +
-            ", description='" + description + '\'' +
-            '}';
+    // Just name and description, don't need full neighbors/objects here for a quick look.
+    return "Room{name='"
+        + name
+        + "', description_preview='"
+        + (description != null
+            ? description.substring(0, Math.min(description.length(), 30)) + "..."
+            : "N/A")
+        + "'}";
   }
 }

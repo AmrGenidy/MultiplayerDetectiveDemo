@@ -5,6 +5,7 @@ import java.util.*;
 public class DoctorWatson extends MovableCharacter {
   private List<String> hints;
   private List<String> remainingHints;
+
   // Inherits 'random' from MovableCharacter
 
   public DoctorWatson(List<String> hints) {
@@ -15,8 +16,8 @@ public class DoctorWatson extends MovableCharacter {
   }
 
   /**
-   * Provides a random hint from the available list, removing it until reset.
-   * Returns the hint text without printing it.
+   * Provides a random hint from the available list, removing it until reset. Returns the hint text
+   * without printing it.
    *
    * @return A hint String, or a default message if no hints are available.
    */
@@ -40,7 +41,8 @@ public class DoctorWatson extends MovableCharacter {
 
   // Helper method to select and remove a hint
   private String selectAndRemoveHint() {
-    if (remainingHints.isEmpty()) { // Should not happen if called after checks in provideHint, but safety first
+    if (remainingHints
+        .isEmpty()) { // Should not happen if called after checks in provideHint, but safety first
       return "My mind is blank at the moment.";
     }
     int index = random.nextInt(remainingHints.size());
