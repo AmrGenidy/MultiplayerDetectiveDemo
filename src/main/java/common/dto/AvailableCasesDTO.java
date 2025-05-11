@@ -1,22 +1,24 @@
 package common.dto;
 
+import java.io.Serial;
 import java.io.Serializable;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 
 public class AvailableCasesDTO implements Serializable {
-    private static final long serialVersionUID = 1L;
-    private final List<CaseInfoDTO> cases;
+  @Serial private static final long serialVersionUID = 1L;
+  private final List<CaseInfoDTO> cases;
 
-    public AvailableCasesDTO(List<CaseInfoDTO> cases) {
-        this.cases = cases != null ? new ArrayList<>(cases) : new ArrayList<>();
-    }
+  public AvailableCasesDTO(List<CaseInfoDTO> cases) {
+    this.cases = cases != null ? new ArrayList<>(cases) : new ArrayList<>();
+  }
 
-    public List<CaseInfoDTO> getCases() {
-        return new ArrayList<>(cases); // Return a copy
-    }
-    @Override
-    public String toString() {
-        return "AvailableCasesDTO{" + "cases_count=" + cases.size() + '}';
-    }
+  public List<CaseInfoDTO> getCases() {
+    return new ArrayList<>(cases); // Return a copy
+  }
+
+  @Override
+  public String toString() {
+    return "AvailableCasesDTO{" + "cases_count=" + cases.size() + '}';
+  }
 }

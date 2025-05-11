@@ -1,8 +1,8 @@
 package Core; // Assuming 'core' is the package name
 
+import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
-import java.io.Serializable; // Added for serialization
 
 public class Detective implements Serializable {
   private static final long serialVersionUID = 1L; // For Serializable
@@ -25,8 +25,8 @@ public class Detective implements Serializable {
   }
 
   /**
-   * Resets the detective's case-specific state for a new game or case.
-   * PlayerId and currentRoom (initially) are typically managed by the game context.
+   * Resets the detective's case-specific state for a new game or case. PlayerId and currentRoom
+   * (initially) are typically managed by the game context.
    */
   public void resetForNewCase() {
     this.rank = DEFAULT_RANK;
@@ -44,7 +44,8 @@ public class Detective implements Serializable {
    */
   public boolean incrementDeduceCount(String objectName) {
     if (objectName == null || objectName.trim().isEmpty()) return false;
-    if (deducedObjects.add(objectName.toLowerCase())) { // .add() returns true if not already present
+    if (deducedObjects.add(
+        objectName.toLowerCase())) { // .add() returns true if not already present
       deduceCount++;
       return true;
     }
@@ -88,8 +89,8 @@ public class Detective implements Serializable {
   }
 
   /**
-   * Evaluates the player's rank based on deduceCount and finalExamScore.
-   * This method updates the internal rank.
+   * Evaluates the player's rank based on deduceCount and finalExamScore. This method updates the
+   * internal rank.
    */
   public void evaluateRank() {
     // Define thresholds for rank evaluation - these can be constants
@@ -100,7 +101,8 @@ public class Detective implements Serializable {
 
     if (finalExamScore >= SENIOR_SCORE_THRESHOLD && deduceCount <= SENIOR_DEDUCE_MAX) {
       rank = "Senior Investigator";
-    } else if (finalExamScore >= INTERMEDIATE_SCORE_THRESHOLD && deduceCount <= INTERMEDIATE_DEDUCE_MAX) {
+    } else if (finalExamScore >= INTERMEDIATE_SCORE_THRESHOLD
+        && deduceCount <= INTERMEDIATE_DEDUCE_MAX) {
       rank = "Intermediate Investigator";
     } else {
       rank = DEFAULT_RANK; // Default or "Junior Investigator"
@@ -109,11 +111,16 @@ public class Detective implements Serializable {
 
   @Override
   public String toString() {
-    return "Detective{" +
-            "playerId='" + playerId + '\'' +
-            ", rank='" + rank + '\'' +
-            ", currentRoom=" + (currentRoom != null ? currentRoom.getName() : "None") +
-            '}';
+    return "Detective{"
+        + "playerId='"
+        + playerId
+        + '\''
+        + ", rank='"
+        + rank
+        + '\''
+        + ", currentRoom="
+        + (currentRoom != null ? currentRoom.getName() : "None")
+        + '}';
   }
 
   // equals and hashCode if Detectives are stored in Sets or used as Map keys
