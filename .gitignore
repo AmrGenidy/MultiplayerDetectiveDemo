@@ -5,7 +5,8 @@ out/
 *.iml
 *.ipr
 *.iws
-.idea/
+.idea
+
 target/
 # Ignore compiled Java classes
 *.class
@@ -23,7 +24,7 @@ bin/
 .sts4-cache
 !**/src/main/**/bin/
 !**/src/test/**/bin/
-.idea
+.idea/
 
 ### NetBeans ###
 /nbproject/private/
