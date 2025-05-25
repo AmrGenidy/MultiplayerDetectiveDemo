@@ -348,9 +348,9 @@ public class GameClient implements Runnable {
   }
 
   private void handleInGameOrLobbyReadyInput(String input, ClientState currentStateForCommand) {
-    log("H_IGOLRI: Input='" + input + "', State=" + currentStateForCommand);
+    // log("H_IGOLRI: Input='" + input + "', State=" + currentStateForCommand);
     if (isChatCommand(input)) {
-      log("H_IGOLRI: Detected chat command.");
+      // log("H_IGOLRI: Detected chat command.");
       processChatCommandOnly(input); // This method sends the ChatMessage
       return;
     }
@@ -358,15 +358,11 @@ public class GameClient implements Runnable {
     CommandParserClient.ParsedCommandData parsedData = CommandParserClient.parse(input);
     if (parsedData == null || parsedData.commandName == null || parsedData.commandName.isEmpty()) {
       printToConsole("Invalid command format (parser returned null or empty command name).");
-      log("H_IGOLRI: ParsedData is null or commandName is empty.");
+      // log("H_IGOLRI: ParsedData is null or commandName is empty.");
       return;
     }
-    log(
-        "H_IGOLRI: Parsed to commandName='"
-            + parsedData.commandName
-            + "', arg='"
-            + parsedData.getFirstArgument()
-            + "'");
+    // log("H_IGOLRI: Parsed to commandName='" + parsedData.commandName + "', arg='" +
+    // parsedData.getFirstArgument() + "'");
 
     // Now, directly use the factory. The factory contains all logic for which command to create.
     Command commandToExecute =
@@ -374,10 +370,8 @@ public class GameClient implements Runnable {
             parsedData, isThisClientTheHost(), currentStateForCommand);
 
     if (commandToExecute != null) {
-      log(
-          "H_IGOLRI: Factory created command: "
-              + commandToExecute.getClass().getSimpleName()
-              + ". Sending to server.");
+      // log("H_IGOLRI: Factory created command: " + commandToExecute.getClass().getSimpleName() +
+      // ". Sending to server.");
       // If it's a request command (created because client is guest), print the "Sending request..."
       // message
       if (!isThisClientTheHost()) {
@@ -390,18 +384,6 @@ public class GameClient implements Runnable {
       updateClientStateBeforeSending(commandToExecute);
       sendToServer(commandToExecute);
     } else {
-      // Factory returned null.
-      // The factory itself might have printed a specific usage error (e.g., "Usage: move
-      // <direction>").
-      // If not, then the command is truly unknown or not valid for the context as per factory
-      // logic.
-      log("H_IGOLRI: Factory returned NULL for commandName='" + parsedData.commandName + "'.");
-      // Avoid printing "Unknown command" if factory already printed a specific error.
-      // This is hard to detect perfectly without factory returning an error code.
-      // For now, let's assume if factory returns null, it might have printed something or it's
-      // genuinely unknown.
-      // A simple check: if it's a command that *requires* an argument and arg was null, factory
-      // would have printed.
       boolean factoryLikelyPrintedError = false;
       String cmd = parsedData.commandName;
       String arg = parsedData.getFirstArgument();
