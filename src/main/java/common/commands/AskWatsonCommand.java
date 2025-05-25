@@ -1,13 +1,12 @@
 package common.commands;
 
 import common.dto.TextMessage;
-import common.dto.WatsonHintResponseDTO; // Import the new DTO
+import common.dto.WatsonHintResponseDTO;
 import common.interfaces.GameActionContext;
 import java.io.Serial;
 
 public class AskWatsonCommand extends BaseCommand {
-  @Serial
-  private static final long serialVersionUID = 1L;
+  @Serial private static final long serialVersionUID = 1L;
 
   public AskWatsonCommand() {
     super(true); // Requires case to be started
@@ -18,7 +17,8 @@ public class AskWatsonCommand extends BaseCommand {
     WatsonHintResponseDTO watsonResponse = context.askWatsonForHint(getPlayerId());
 
     if (watsonResponse == null) { // Defensive check, context should always return an object
-      context.sendResponseToPlayer(getPlayerId(), new TextMessage("Error receiving response from Watson.", true));
+      context.sendResponseToPlayer(
+          getPlayerId(), new TextMessage("Error receiving response from Watson.", true));
       return;
     }
 

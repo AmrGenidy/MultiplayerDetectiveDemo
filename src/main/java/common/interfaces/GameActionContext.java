@@ -8,7 +8,6 @@ import Core.TaskList;
 import JsonDTO.CaseFile;
 import common.dto.JournalEntryDTO;
 import common.dto.WatsonHintResponseDTO;
-
 import java.io.Serializable;
 import java.util.List;
 
@@ -64,7 +63,6 @@ public interface GameActionContext {
 
   void processExamAnswer(
       String playerId, int questionNumber, String answerText); // Process one answer
-
 
   void updateNpcMovements(String triggeringPlayerId); // Trigger NPC movement phase
 

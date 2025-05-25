@@ -1,7 +1,6 @@
 package server;
 
 import Core.*;
-import Core.enums.Rank;
 import JsonDTO.CaseFile;
 import common.commands.Command;
 import common.commands.InitiateFinalExamCommand;
@@ -1036,7 +1035,8 @@ public class GameContextServer implements GameContext, GameActionContext {
             + currentExamQuestionsList.size());
 
     // ... (Update ranks, determine feedback message - this part remains the same) ...
-    String finalRankString = Core.enums.Rank.JUNIOR_INVESTIGATOR.getDisplayName(); // More robust default
+    String finalRankString =
+        Core.enums.Rank.JUNIOR_INVESTIGATOR.getDisplayName(); // More robust default
     Detective hostDetective = getPlayerDetective(hostPlayerId);
     if (hostDetective != null) {
       hostDetective.setFinalExamScore(score);
@@ -1067,7 +1067,9 @@ public class GameContextServer implements GameContext, GameActionContext {
               + hostDisplay
               + ". Further investigation was needed.";
 
-    ExamResultDTO resultDTO = new ExamResultDTO(score, totalQuestions, feedback, finalRankString, reviewableAnswersDetails);
+    ExamResultDTO resultDTO =
+        new ExamResultDTO(
+            score, totalQuestions, feedback, finalRankString, reviewableAnswersDetails);
 
     logGameMessage(
         "EVAL_EXAM_RESULTS: Broadcasting ExamResultDTO: Score="
@@ -1152,7 +1154,8 @@ public class GameContextServer implements GameContext, GameActionContext {
     Room watsonRoom = this.watson.getCurrentRoom();
 
     if (playerRoom == null) {
-      return new WatsonHintResponseDTO("Your location is unknown. Cannot determine if Watson is present.", false);
+      return new WatsonHintResponseDTO(
+          "Your location is unknown. Cannot determine if Watson is present.", false);
     }
     if (watsonRoom == null) {
       return new WatsonHintResponseDTO("Dr. Watson's location is currently unknown.", false);
@@ -1162,19 +1165,22 @@ public class GameContextServer implements GameContext, GameActionContext {
       String hintText = this.watson.provideHint(); // Gets the raw hint string
 
       boolean isActualGameHint = true;
-      if (hintText == null || hintText.trim().isEmpty() ||
-              hintText.startsWith("I seem to be out of specific thoughts") ||
-              hintText.startsWith("My mind is blank") ||
-              hintText.startsWith("I'm afraid I have no specific insights")) {
+      if (hintText == null
+          || hintText.trim().isEmpty()
+          || hintText.startsWith("I seem to be out of specific thoughts")
+          || hintText.startsWith("My mind is blank")
+          || hintText.startsWith("I'm afraid I have no specific insights")) {
         isActualGameHint = false;
       }
-      if (hintText == null || hintText.trim().isEmpty()){
+      if (hintText == null || hintText.trim().isEmpty()) {
         hintText = "Dr. Watson ponders but offers no specific insight at the moment.";
       }
 
       // Journal entry for Watson's hint could be added here if desired for MP,
-      // and then broadcast. Or let AskWatsonCommand handle it (though command doesn't know display names easily).
-      // For consistency, if AskWatsonCommand adds to journal, it needs context.getPlayerDisplayName("Dr. Watson").
+      // and then broadcast. Or let AskWatsonCommand handle it (though command doesn't know display
+      // names easily).
+      // For consistency, if AskWatsonCommand adds to journal, it needs
+      // context.getPlayerDisplayName("Dr. Watson").
       // For now, let's assume Watson's hints ARE NOT auto-journaled by this context method.
       return new WatsonHintResponseDTO(hintText, isActualGameHint);
     } else {
@@ -1386,11 +1392,11 @@ public class GameContextServer implements GameContext, GameActionContext {
     }
     Map<String, Integer> scores = new HashMap<>();
     Map<String, String> ranks = new HashMap<>();
-    if(player1Detective != null && player1Id != null) {
+    if (player1Detective != null && player1Id != null) {
       scores.put(player1Id, player1Detective.getFinalExamScore());
       ranks.put(player1Id, player1Detective.getRankEnum().name()); // <<< SAVE ENUM NAME
     }
-    if(player2Detective != null && player2Id != null) {
+    if (player2Detective != null && player2Id != null) {
       scores.put(player2Id, player2Detective.getFinalExamScore());
       ranks.put(player2Id, player2Detective.getRankEnum().name()); // <<< SAVE ENUM NAME
     }

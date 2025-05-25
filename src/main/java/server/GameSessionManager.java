@@ -37,8 +37,6 @@ public class GameSessionManager {
   private final GameServer server; // For logging.
   private final PersistenceManager persistenceManager; // For saving/loading game states.
 
-
-
   private static final String CASES_DIRECTORY = "cases"; // Where my case JSONs live.
 
   // --- Constructor & Initialization ---
@@ -114,8 +112,8 @@ public class GameSessionManager {
   // --- Game Creation & Joining ---
 
   /**
-   * Generates a unique 5-character alphanumeric code for a new private game session.
-   * It ensures the generated code is not already in use by another active private session.
+   * Generates a unique 5-character alphanumeric code for a new private game session. It ensures the
+   * generated code is not already in use by another active private session.
    *
    * @return A unique game code.
    */
@@ -142,15 +140,21 @@ public class GameSessionManager {
   }
 
   /** Creates a new game session (public or private). */
-  public HostGameResponseDTO createGame(ClientSession hostClient, String caseTitleFromUser, boolean isPublic) {
+  public HostGameResponseDTO createGame(
+      ClientSession hostClient, String caseTitleFromUser, boolean isPublic) {
     managerLock.lock();
     try {
       CaseFile selectedCaseFile = availableCases.get(caseTitleFromUser.toLowerCase());
       if (selectedCaseFile == null) {
-        return new HostGameResponseDTO(false, "Case '" + caseTitleFromUser + "' not found on server.", null, null);
+        return new HostGameResponseDTO(
+            false, "Case '" + caseTitleFromUser + "' not found on server.", null, null);
       }
       if (hostClient.getAssociatedGameSession() != null) {
-        return new HostGameResponseDTO(false, "You are already in a game or lobby.", null, hostClient.getAssociatedGameSession().getSessionId());
+        return new HostGameResponseDTO(
+            false,
+            "You are already in a game or lobby.",
+            null,
+            hostClient.getAssociatedGameSession().getSessionId());
       }
 
       String gameCodeForSession = null;
@@ -158,20 +162,23 @@ public class GameSessionManager {
         gameCodeForSession = generateUniquePrivateGameCode();
       }
 
-      GameSession newSession = new GameSession(
-              selectedCaseFile,
-              hostClient,
-              isPublic,
-              gameCodeForSession,
-              this,
-              server
-      );
+      GameSession newSession =
+          new GameSession(selectedCaseFile, hostClient, isPublic, gameCodeForSession, this, server);
 
       // *** CHECK SESSION STATE AFTER CONSTRUCTION ***
       if (newSession.getState() == GameSessionState.ERROR) {
-        server.log("GameSession " + newSession.getSessionId() + " for case " + newSession.getCaseTitle() + " ended up in ERROR state after construction.");
+        server.log(
+            "GameSession "
+                + newSession.getSessionId()
+                + " for case "
+                + newSession.getCaseTitle()
+                + " ended up in ERROR state after construction.");
         // Do not add to active/public lists if it failed to initialize.
-        return new HostGameResponseDTO(false, "Failed to initialize game session data for case: " + newSession.getCaseTitle(), null, null);
+        return new HostGameResponseDTO(
+            false,
+            "Failed to initialize game session data for case: " + newSession.getCaseTitle(),
+            null,
+            null);
       }
       // *** If state is WAITING_FOR_PLAYERS, it means loadCaseDataIntoContext() succeeded. ***
 
@@ -183,14 +190,24 @@ public class GameSessionManager {
           privateGameCodeToSessionId.put(newSession.getGameCode(), newSession.getSessionId());
         }
       }
-      server.log("New game session created: " + newSession.getSessionId() +
-              (isPublic ? " (Public)" : " (Private Code: " + newSession.getGameCode() + ")") +
-              " for case: " + newSession.getCaseTitle() + " by host: " + hostClient.getDisplayId());
+      server.log(
+          "New game session created: "
+              + newSession.getSessionId()
+              + (isPublic ? " (Public)" : " (Private Code: " + newSession.getGameCode() + ")")
+              + " for case: "
+              + newSession.getCaseTitle()
+              + " by host: "
+              + hostClient.getDisplayId());
 
       // Send the success response DTO from the manager.
-      return new HostGameResponseDTO(true,
-              "Game hosted successfully for case '" + newSession.getCaseTitle() + "'. Waiting for opponent..." + (isPublic ? "" : " Private Code: " + newSession.getGameCode()),
-              newSession.getGameCode(), newSession.getSessionId());
+      return new HostGameResponseDTO(
+          true,
+          "Game hosted successfully for case '"
+              + newSession.getCaseTitle()
+              + "'. Waiting for opponent..."
+              + (isPublic ? "" : " Private Code: " + newSession.getGameCode()),
+          newSession.getGameCode(),
+          newSession.getSessionId());
     } finally {
       managerLock.unlock();
     }

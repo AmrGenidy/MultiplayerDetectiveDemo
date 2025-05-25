@@ -71,9 +71,19 @@ public class GameClient implements Runnable {
       if (!connected.get()) {
         if (cs == ClientState.RECONNECTING) {
           if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            printToConsole("Attempting to reconnect (" + (reconnectAttempts + 1) + "/" + MAX_RECONNECT_ATTEMPTS + ")...");
-            try { Thread.sleep(RECONNECT_DELAY_MS); } catch (InterruptedException e) { if(!running.get()) break; Thread.currentThread().interrupt(); }
-            if(running.get() && !connected.get()) {
+            printToConsole(
+                "Attempting to reconnect ("
+                    + (reconnectAttempts + 1)
+                    + "/"
+                    + MAX_RECONNECT_ATTEMPTS
+                    + ")...");
+            try {
+              Thread.sleep(RECONNECT_DELAY_MS);
+            } catch (InterruptedException e) {
+              if (!running.get()) break;
+              Thread.currentThread().interrupt();
+            }
+            if (running.get() && !connected.get()) {
               reconnectAttempts++;
               attemptConnect();
             }
@@ -98,8 +108,14 @@ public class GameClient implements Runnable {
         String input = "";
         if (consoleScanner != null && consoleScanner.hasNextLine()) {
           input = consoleScanner.nextLine();
-        } else { /* ... (handle scanner closed) ... */ break; }
-        if (input == null) { /* ... */ break; }
+        } else {
+          /* ... (handle scanner closed) ... */
+          break;
+        }
+        if (input == null) {
+          /* ... */
+          break;
+        }
         processUserInputBasedOnState(input.trim());
       } else {
         // In a non-interactive state
@@ -115,13 +131,14 @@ public class GameClient implements Runnable {
     log("Client main loop finished.");
   }
 
-
   private void displayMenuOrPromptForCurrentState() {
     consoleLock.lock();
     try {
       ClientState cs = currentState.get();
       // Use the enum's property for checks
-      if (consoleScanner == null && cs.isInteractive()) { return; } // <<< MODIFIED HERE
+      if (consoleScanner == null && cs.isInteractive()) {
+        return;
+      } // <<< MODIFIED HERE
       System.out.println();
 
       System.out.println(); // Start with a newline for better separation
@@ -241,23 +258,51 @@ public class GameClient implements Runnable {
     log("PROCESS_USER_INPUT: Input='" + input + "', State=" + cs);
 
     // --- Global commands handled first and return ---
-    if (input.equalsIgnoreCase("quit")) { handleQuitCommand(cs); return; }
-    if (input.toLowerCase().startsWith("/setname ")) { handleSetNameCommand(input); return; }
-    if (input.equalsIgnoreCase("cancel") && cs.isPrimarilyWaiting()) { handleCancelWaitingState(cs); return; }
-    if ((cs == ClientState.DISCONNECTED || cs == ClientState.RECONNECTING) && input.equalsIgnoreCase("connect")) {
-      this.reconnectAttempts = 0; attemptConnect(); return;
+    if (input.equalsIgnoreCase("quit")) {
+      handleQuitCommand(cs);
+      return;
     }
-    if (cs == ClientState.RECONNECTING && !input.equalsIgnoreCase("quit")) { return; } // Ignore other input during auto-reconnect
+    if (input.toLowerCase().startsWith("/setname ")) {
+      handleSetNameCommand(input);
+      return;
+    }
+    if (input.equalsIgnoreCase("cancel") && cs.isPrimarilyWaiting()) {
+      handleCancelWaitingState(cs);
+      return;
+    }
+    if ((cs == ClientState.DISCONNECTED || cs == ClientState.RECONNECTING)
+        && input.equalsIgnoreCase("connect")) {
+      this.reconnectAttempts = 0;
+      attemptConnect();
+      return;
+    }
+    if (cs == ClientState.RECONNECTING && !input.equalsIgnoreCase("quit")) {
+      return;
+    } // Ignore other input during auto-reconnect
 
     // --- State-Specific Input Handling ---
     switch (cs) {
-      case CONNECTED_IDLE: handleMainMenuInput(input); break;
-      case SELECTING_HOST_TYPE: handleHostTypeSelection(input); break;
-      case SELECTING_HOST_CASE: handleHostCaseSelection(input); break;
-      case HOSTING_LOBBY_WAITING: handleHostingLobbyInput(input); break;
-      case SELECTING_JOIN_TYPE: handleJoinTypeSelection(input); break;
-      case VIEWING_PUBLIC_GAMES: handlePublicGameSelection(input); break;
-      case ENTERING_PRIVATE_CODE: handlePrivateCodeEntry(input); break;
+      case CONNECTED_IDLE:
+        handleMainMenuInput(input);
+        break;
+      case SELECTING_HOST_TYPE:
+        handleHostTypeSelection(input);
+        break;
+      case SELECTING_HOST_CASE:
+        handleHostCaseSelection(input);
+        break;
+      case HOSTING_LOBBY_WAITING:
+        handleHostingLobbyInput(input);
+        break;
+      case SELECTING_JOIN_TYPE:
+        handleJoinTypeSelection(input);
+        break;
+      case VIEWING_PUBLIC_GAMES:
+        handlePublicGameSelection(input);
+        break;
+      case ENTERING_PRIVATE_CODE:
+        handlePrivateCodeEntry(input);
+        break;
 
       case IN_LOBBY_AWAITING_START:
       case IN_GAME:
@@ -268,7 +313,9 @@ public class GameClient implements Runnable {
         handleExamAnswerInput(input);
         break;
       case VIEWING_EXAM_RESULT:
-        if (!input.isEmpty()) { printToConsole("Returning to game..."); }
+        if (!input.isEmpty()) {
+          printToConsole("Returning to game...");
+        }
         currentState.set(ClientState.IN_GAME); // DTO handler should do this primarily
         break;
       case DISCONNECTED: // 'connect' and 'quit' handled by globals
@@ -285,13 +332,16 @@ public class GameClient implements Runnable {
       case SENDING_JOIN_PRIVATE_REQUEST:
       case ATTEMPTING_FINAL_EXAM:
       case SUBMITTING_EXAM_ANSWER:
-        if (!input.equalsIgnoreCase("cancel") && !input.equalsIgnoreCase("quit") && !input.isEmpty()) {
+        if (!input.equalsIgnoreCase("cancel")
+            && !input.equalsIgnoreCase("quit")
+            && !input.isEmpty()) {
           // The prompt for these states already says "Waiting... (type 'cancel'...)"
         }
         break;
       default:
         if (cs.isInteractive() && !isChatCommand(input) && !input.isEmpty()) {
-          printToConsole("Command '" + input + "' not applicable in current state: " + cs + ". Type 'help'.");
+          printToConsole(
+              "Command '" + input + "' not applicable in current state: " + cs + ". Type 'help'.");
         }
         break;
     }
@@ -311,14 +361,25 @@ public class GameClient implements Runnable {
       log("H_IGOLRI: ParsedData is null or commandName is empty.");
       return;
     }
-    log("H_IGOLRI: Parsed to commandName='" + parsedData.commandName + "', arg='" + parsedData.getFirstArgument() + "'");
+    log(
+        "H_IGOLRI: Parsed to commandName='"
+            + parsedData.commandName
+            + "', arg='"
+            + parsedData.getFirstArgument()
+            + "'");
 
     // Now, directly use the factory. The factory contains all logic for which command to create.
-    Command commandToExecute = CommandFactoryClient.createCommand(parsedData, isThisClientTheHost(), currentStateForCommand);
+    Command commandToExecute =
+        CommandFactoryClient.createCommand(
+            parsedData, isThisClientTheHost(), currentStateForCommand);
 
     if (commandToExecute != null) {
-      log("H_IGOLRI: Factory created command: " + commandToExecute.getClass().getSimpleName() + ". Sending to server.");
-      // If it's a request command (created because client is guest), print the "Sending request..." message
+      log(
+          "H_IGOLRI: Factory created command: "
+              + commandToExecute.getClass().getSimpleName()
+              + ". Sending to server.");
+      // If it's a request command (created because client is guest), print the "Sending request..."
+      // message
       if (!isThisClientTheHost()) {
         if (commandToExecute instanceof RequestStartCaseCommand) {
           printToConsole("Sending request to host to start the case...");
@@ -330,42 +391,63 @@ public class GameClient implements Runnable {
       sendToServer(commandToExecute);
     } else {
       // Factory returned null.
-      // The factory itself might have printed a specific usage error (e.g., "Usage: move <direction>").
-      // If not, then the command is truly unknown or not valid for the context as per factory logic.
+      // The factory itself might have printed a specific usage error (e.g., "Usage: move
+      // <direction>").
+      // If not, then the command is truly unknown or not valid for the context as per factory
+      // logic.
       log("H_IGOLRI: Factory returned NULL for commandName='" + parsedData.commandName + "'.");
       // Avoid printing "Unknown command" if factory already printed a specific error.
       // This is hard to detect perfectly without factory returning an error code.
-      // For now, let's assume if factory returns null, it might have printed something or it's genuinely unknown.
-      // A simple check: if it's a command that *requires* an argument and arg was null, factory would have printed.
+      // For now, let's assume if factory returns null, it might have printed something or it's
+      // genuinely unknown.
+      // A simple check: if it's a command that *requires* an argument and arg was null, factory
+      // would have printed.
       boolean factoryLikelyPrintedError = false;
       String cmd = parsedData.commandName;
       String arg = parsedData.getFirstArgument();
-      if ((cmd.equals("move") || cmd.equals("examine") || cmd.equals("question") ||
-              cmd.equals("journal add") || cmd.equals("deduce") || cmd.equals("/setname") ||
-              cmd.equals("host game") || cmd.equals("join public game") || cmd.equals("join private game") ||
-              cmd.equals("submit exam answer")) && (arg == null || arg.isEmpty())) {
+      if ((cmd.equals("move")
+              || cmd.equals("examine")
+              || cmd.equals("question")
+              || cmd.equals("journal add")
+              || cmd.equals("deduce")
+              || cmd.equals("/setname")
+              || cmd.equals("host game")
+              || cmd.equals("join public game")
+              || cmd.equals("join private game")
+              || cmd.equals("submit exam answer"))
+          && (arg == null || arg.isEmpty())) {
         factoryLikelyPrintedError = true;
       }
       // Also, if factory rejected "start case" or "final exam" due to wrong state.
-      if ((cmd.equals("start case") || cmd.equals("initiate final exam") || cmd.equals("final exam")) &&
-              CommandFactoryClient.createCommand(parsedData,isThisClientTheHost(),currentStateForCommand) == null ) {
-        // if the factory would return null for this specific command due to state/role, it would have printed.
+      if ((cmd.equals("start case")
+              || cmd.equals("initiate final exam")
+              || cmd.equals("final exam"))
+          && CommandFactoryClient.createCommand(
+                  parsedData, isThisClientTheHost(), currentStateForCommand)
+              == null) {
+        // if the factory would return null for this specific command due to state/role, it would
+        // have printed.
         // This check is a bit circular here though.
         // The factory's System.err.println for state mismatches is the key.
       }
 
-
       // If we are reasonably sure the factory didn't print a specific reason for returning null:
-      // This part needs careful thought. If factory prints for state issues, we don't want to double print.
+      // This part needs careful thought. If factory prints for state issues, we don't want to
+      // double print.
       // For now, let's assume the factory IS printing for state issues for start case/final exam.
       // And for missing args. So, if it's null, it's either because of those or truly unknown.
       // The client will see the System.err.println from factory.
-      // If commandName is valid but factory returned null for other reasons (e.g. internal factory bug)
+      // If commandName is valid but factory returned null for other reasons (e.g. internal factory
+      // bug)
       // then the generic unknown is fine.
-      // The factory *should not* print "Unknown command". It should print specific errors or return null.
+      // The factory *should not* print "Unknown command". It should print specific errors or return
+      // null.
       // The GameClient then prints the generic "Unknown command".
       if (!factoryLikelyPrintedError) { // This condition is imperfect.
-        printToConsole("Unknown command: '" + parsedData.commandName + "' or not applicable now. Type 'help'.");
+        printToConsole(
+            "Unknown command: '"
+                + parsedData.commandName
+                + "' or not applicable now. Type 'help'.");
       }
     }
   }
@@ -411,8 +493,12 @@ public class GameClient implements Runnable {
   private void handleSetNameCommand(String input) {
     // This is a global command, so it doesn't strictly depend on IN_GAME or LOBBY state
     // for creation, but does for server processing.
-    CommandParserClient.ParsedCommandData parsedData = CommandParserClient.parse(input); // input is like "/setname NewName"
-    if (parsedData == null || !parsedData.commandName.equals("/setname") || parsedData.getFirstArgument() == null || parsedData.getFirstArgument().isEmpty()) {
+    CommandParserClient.ParsedCommandData parsedData =
+        CommandParserClient.parse(input); // input is like "/setname NewName"
+    if (parsedData == null
+        || !parsedData.commandName.equals("/setname")
+        || parsedData.getFirstArgument() == null
+        || parsedData.getFirstArgument().isEmpty()) {
       printToConsole("Usage: /setname <new_display_name>");
       return;
     }
@@ -425,7 +511,9 @@ public class GameClient implements Runnable {
 
       if (connected.get()) {
         // Create command via factory (factory now handles /setname)
-        Command setNameCmd = CommandFactoryClient.createCommand(parsedData, isThisClientTheHost(), currentState.get());
+        Command setNameCmd =
+            CommandFactoryClient.createCommand(
+                parsedData, isThisClientTheHost(), currentState.get());
         if (setNameCmd != null) { // Should not be null if parser and factory are aligned
           sendToServer(setNameCmd);
         } else {
@@ -624,7 +712,6 @@ public class GameClient implements Runnable {
     }
   }
 
-
   private void handleExamAnswerInput(
       String inputAnswer) { // inputAnswer is what the user typed, e.g., "sad"
     if (inputAnswer.isEmpty()) {
@@ -656,7 +743,7 @@ public class GameClient implements Runnable {
     String chatText = input.substring(input.indexOf(" ") + 1).trim();
     if (!chatText.isEmpty()) {
       ChatMessage chatMsg =
-              new ChatMessage(this.playerDisplayId, chatText, System.currentTimeMillis());
+          new ChatMessage(this.playerDisplayId, chatText, System.currentTimeMillis());
       sendToServer(chatMsg);
     } else {
       printToConsole("Usage: /chat <message>  OR  /c <message>");
@@ -1004,7 +1091,6 @@ public class GameClient implements Runnable {
     }
   }
 
-
   private ClientState determineNextStateForOutgoingCommand(Command command, ClientState current) {
     // Based on the type of command being sent, decide if the client should enter a "waiting" state.
     if (command instanceof RequestCaseListCommand) {
@@ -1048,7 +1134,14 @@ public class GameClient implements Runnable {
     if (nextState != current) {
       if (nextState.isPrimarilyWaiting()) {
         this.preWaitingState = current;
-        log("Transitioning from " + current + " to waiting state " + nextState + " (preWaitingState set to " + this.preWaitingState + ")");
+        log(
+            "Transitioning from "
+                + current
+                + " to waiting state "
+                + nextState
+                + " (preWaitingState set to "
+                + this.preWaitingState
+                + ")");
       } else {
         this.preWaitingState = null;
         log("Transitioning from " + current + " to " + nextState + " (preWaitingState cleared)");
@@ -1248,6 +1341,6 @@ public class GameClient implements Runnable {
   private void handleNpcMoved(NpcMovedDTO nmd) {
     // You can make this message more subtle if desired, e.g., not starting with [GAME INFO]
     // if it's considered part of normal world updates.
-    //printToConsole("[GAME INFO] " + nmd.toString()); // Uses the DTO's helpful toString() method
+    // printToConsole("[GAME INFO] " + nmd.toString()); // Uses the DTO's helpful toString() method
   }
 }

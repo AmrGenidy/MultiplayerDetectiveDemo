@@ -823,7 +823,8 @@ public class GameContextSinglePlayer implements GameContext, GameActionContext {
     }
     // In SP, this.currentRoom is the player's current room.
     if (this.currentRoom == null) {
-      return new WatsonHintResponseDTO("Your location is unknown. Cannot determine if Watson is present.", false);
+      return new WatsonHintResponseDTO(
+          "Your location is unknown. Cannot determine if Watson is present.", false);
     }
     if (this.watson.getCurrentRoom() == null) {
       return new WatsonHintResponseDTO("Dr. Watson's location is currently unknown.", false);
@@ -834,14 +835,17 @@ public class GameContextSinglePlayer implements GameContext, GameActionContext {
 
       // Check if the returned hintText signifies "no real hint"
       boolean isActualGameHint = true; // Assume it's a real hint by default
-      if (hintText == null || hintText.trim().isEmpty() ||
-              hintText.startsWith("I seem to be out of specific thoughts") || // from DoctorWatson
-              hintText.startsWith("My mind is blank") || // from DoctorWatson
-              hintText.startsWith("I'm afraid I have no specific insights")) { // from DoctorWatson
+      if (hintText == null
+          || hintText.trim().isEmpty()
+          || hintText.startsWith("I seem to be out of specific thoughts")
+          || // from DoctorWatson
+          hintText.startsWith("My mind is blank")
+          || // from DoctorWatson
+          hintText.startsWith("I'm afraid I have no specific insights")) { // from DoctorWatson
         isActualGameHint = false;
       }
       // If hintText was null/empty, provide a default message
-      if (hintText == null || hintText.trim().isEmpty()){
+      if (hintText == null || hintText.trim().isEmpty()) {
         hintText = "Dr. Watson ponders but offers no specific insight at the moment.";
       }
 
@@ -851,7 +855,6 @@ public class GameContextSinglePlayer implements GameContext, GameActionContext {
       return new WatsonHintResponseDTO("Dr. Watson is not in this room.", false);
     }
   }
-
 
   public int getAwaitingQuestionNumber() {
     return isAwaitingExamAnswer() ? currentQuestionIndex + 1 : 0;
