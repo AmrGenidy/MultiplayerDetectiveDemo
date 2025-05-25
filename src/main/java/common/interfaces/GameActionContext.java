@@ -7,6 +7,8 @@ import Core.Suspect;
 import Core.TaskList;
 import JsonDTO.CaseFile;
 import common.dto.JournalEntryDTO;
+import common.dto.WatsonHintResponseDTO;
+
 import java.io.Serializable;
 import java.util.List;
 
@@ -16,6 +18,8 @@ import java.util.List;
  * GameContextServer) will provide the concrete logic for these actions.
  */
 public interface GameActionContext {
+
+  WatsonHintResponseDTO askWatsonForHint(String playerId);
 
   // --- State Checks & General Info ---
   boolean isCaseStarted();
@@ -61,8 +65,6 @@ public interface GameActionContext {
   void processExamAnswer(
       String playerId, int questionNumber, String answerText); // Process one answer
 
-  // --- NPC Interaction ---
-  String askWatsonForHint(String playerId); // Returns hint string
 
   void updateNpcMovements(String triggeringPlayerId); // Trigger NPC movement phase
 

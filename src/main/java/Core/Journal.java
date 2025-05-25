@@ -1,4 +1,4 @@
-package Core; // Assuming 'core' is the package name
+package Core;
 
 import java.io.Serializable;
 import java.util.ArrayList;

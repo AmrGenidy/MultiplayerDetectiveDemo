@@ -23,7 +23,6 @@ public class GameSession {
 
   // --- Core Session Fields ---
   private final String sessionId; // Unique ID for this game session.
-  private final String caseTitle; // Title of the case, from CaseFile.
   private final CaseFile caseFile; // The actual case data DTO.
   private final GameContextServer gameContext; // Authoritative game state and logic engine.
 
@@ -45,59 +44,55 @@ public class GameSession {
    * context. Attempts to load all case data into the context.
    */
   public GameSession(
-      String caseTitle,
-      CaseFile caseFile,
-      ClientSession hostPlayer,
-      boolean isPublic,
-      GameSessionManager manager,
-      GameServer server) {
+          CaseFile caseFile,
+          ClientSession hostPlayer,
+          boolean isPublic,
+          String assignedGameCode, // <<< MODIFIED: Added assignedGameCode parameter
+          GameSessionManager manager,
+          GameServer server) {
+
     this.sessionId = UUID.randomUUID().toString();
-    this.caseTitle = Objects.requireNonNull(caseTitle, "Case title cannot be null");
-    this.caseFile = Objects.requireNonNull(caseFile, "CaseFile cannot be null");
+    this.caseFile = Objects.requireNonNull(caseFile, "CaseFile DTO cannot be null");
     this.sessionManager = Objects.requireNonNull(manager, "GameSessionManager cannot be null");
     this.server = Objects.requireNonNull(server, "GameServer cannot be null");
-    this.state = GameSessionState.LOADING; // Initial state while setting up.
+    this.state = GameSessionState.LOADING;
 
     this.player1 = Objects.requireNonNull(hostPlayer, "Host player (player1) cannot be null");
-    hostPlayer.setAssociatedGameSession(this); // Link client to this session.
+    hostPlayer.setAssociatedGameSession(this);
+
 
     if (!isPublic) {
-      this.gameCode = generateGameCode();
-      log("Private game session created. Code: " + this.gameCode);
+      // For private games, a code MUST be assigned by the manager.
+      this.gameCode = Objects.requireNonNull(assignedGameCode,
+              "Private game session must be created with an assigned game code.");
+      log("Private game session configured with provided code: " + this.gameCode);
     } else {
-      log("Public game session created.");
+      this.gameCode = null; // Public games don't have a code set this way.
+      log("Public game session created for case: " + this.caseFile.getTitle());
     }
+    // --- END MODIFICATION ---
 
-    // Create the game logic context for this session. Player 2 ID is initially null.
     this.gameContext = new GameContextServer(this, this.caseFile, hostPlayer.getPlayerId(), null);
 
     if (!loadCaseDataIntoContext()) {
-      this.state = GameSessionState.ERROR; // Mark session as errored if loading fails.
-      log(
-          "CRITICAL: Failed to load case data for new session "
-              + sessionId
-              + ". Session state: ERROR.");
+      this.state = GameSessionState.ERROR;
+      log("CRITICAL: Failed to load case data for new session " + sessionId + ". Session state: ERROR.");
       hostPlayer.send(
-          new TextMessage(
-              "Error: Failed to initialize the game data for this case. Session cannot start.",
-              true));
-      // The GameSessionManager should ideally detect this ERROR state and not list it, or clean it
-      // up.
+              new TextMessage(
+                      "Error: Failed to initialize the game data for this case. Session cannot start.",
+                      true));
     } else {
-      this.state = GameSessionState.WAITING_FOR_PLAYERS; // Ready for player 2.
-      log(
-          "Session created for case '"
-              + this.caseTitle
-              + "'. Host: "
-              + hostPlayer.getDisplayId()
-              + ". Waiting for Player 2.");
+      this.state = GameSessionState.WAITING_FOR_PLAYERS;
+      log("Session created for case '" + this.caseFile.getTitle() + "'. Host: " + hostPlayer.getDisplayId() + ". Waiting for Player 2.");
+      // Send HostGameResponseDTO. The gameCode field will now be correctly populated
+      // with either the assigned code or null.
       hostPlayer.send(
-          new HostGameResponseDTO(
-              true,
-              "Game hosted. Waiting for opponent..."
-                  + (isPublic ? "" : " Private Code: " + this.gameCode),
-              this.gameCode,
-              this.sessionId));
+              new HostGameResponseDTO(
+                      true,
+                      "Game hosted. Waiting for opponent..."
+                              + (isPublic ? "" : " Private Code: " + this.gameCode),
+                      this.gameCode, // This will be the assigned code or null
+                      this.sessionId));
     }
   }
 
@@ -135,15 +130,6 @@ public class GameSession {
     return true;
   }
 
-  /** Generates a simple alphanumeric code for private games. */
-  private String generateGameCode() {
-    String chars = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789"; // Omitted 'O'
-    StringBuilder code = new StringBuilder();
-    for (int i = 0; i < 5; i++) {
-      code.append(chars.charAt((int) (Math.random() * chars.length())));
-    }
-    return code.toString();
-  }
 
   // --- Getters ---
   public String getSessionId() {
@@ -151,7 +137,7 @@ public class GameSession {
   }
 
   public String getCaseTitle() {
-    return caseTitle;
+    return this.caseFile != null ? this.caseFile.getTitle() : "Unknown Case"; // Handle null caseFile gracefully
   }
 
   public String getGameCode() {
@@ -252,7 +238,7 @@ public class GameSession {
       newPlayer.send(
           new JoinGameResponseDTO(
               true,
-              "Joined game: " + caseTitle + " with host " + player1.getDisplayId(),
+              "Joined game: " + this.caseFile.getTitle() + " with host " + player1.getDisplayId(),
               this.sessionId));
       if (player1 != null) { // Notify host.
         player1.send(
@@ -449,38 +435,55 @@ public class GameSession {
    * session state. Delegates execution to GameContextServer.
    */
   public void processCommand(Command command, String playerId) {
-    /* ... (as provided, with refined state checks) ... */
     if (command == null || playerId == null) {
-      log("Error: Null command or playerId in processCommand");
+      log("Error: Null command or playerId in processCommand for session " + sessionId);
       return;
     }
     sessionLock.lock();
     try {
       command.setPlayerId(playerId);
-      boolean allowed = false;
-      String cmdName = command.getClass().getSimpleName().replace("Command", "");
-      log("Attempting command " + cmdName + " for " + playerId + " in state " + this.state);
+      boolean commandAllowed = false;
+      String commandSimpleName = command.getClass().getSimpleName().replace("Command", "");
+
+      log("Attempting to process command " + commandSimpleName + " for player " + playerId +
+              " in session " + sessionId + " (Current Session State: " + this.state + ")");
 
       if (this.state == GameSessionState.ACTIVE) {
-        allowed = true;
+        commandAllowed = true; // Most game commands allowed.
       } else if (this.state == GameSessionState.IN_LOBBY_AWAITING_START) {
-        if (command instanceof StartCaseCommand
-            || command instanceof RequestStartCaseCommand
-            || command instanceof ExitCommand
-            || command instanceof HelpCommand) {
-          allowed = true;
+        // Both players are here, waiting for 'start case' or managing lobby.
+        if (command instanceof StartCaseCommand ||
+                command instanceof RequestStartCaseCommand ||
+                command instanceof ExitCommand ||   // Host or Guest can exit this lobby state.
+                command instanceof HelpCommand) {
+          commandAllowed = true;
         }
-      } // Removed: WAITING_FOR_PLAYERS && isFull() because IN_LOBBY_AWAITING_START covers this.
+      } else if (this.state == GameSessionState.WAITING_FOR_PLAYERS) {
+        // Only host (player1) is in this session, waiting for player2.
+        // Host should be able to exit/cancel their own lobby.
+        if (command instanceof ExitCommand && player1 != null && player1.getPlayerId().equals(playerId)) {
+          commandAllowed = true; // Host can exit their own waiting lobby.
+        } else if (command instanceof HelpCommand) { // Allow help for host.
+          commandAllowed = true;
+        }
+        // Other commands like StartCase are not yet relevant.
+      }
+      // Consider other states like LOADING, ERROR, ENDED_* if any commands are valid there.
 
-      if (!allowed) {
+      if (!commandAllowed) {
         ClientSession sender = getClientSessionById(playerId);
-        String msg = "Command '" + cmdName + "' not allowed in session state: " + this.state;
-        if (sender != null) sender.send(new TextMessage(msg, true));
-        log(msg + " (Player: " + playerId + ")");
+        String denialMessage = "Command '" + commandSimpleName +
+                "' is not allowed in the current session state: " + this.state;
+        if (sender != null) {
+          sender.send(new TextMessage(denialMessage, true));
+        }
+        log(denialMessage + " (Player: " + playerId + ")");
         return;
       }
-      log("Command " + cmdName + " allowed. Executing via context...");
+
+      log("Command " + commandSimpleName + " allowed. Executing via GameContextServer...");
       gameContext.executeCommand(command);
+
     } finally {
       sessionLock.unlock();
     }
@@ -603,7 +606,7 @@ public class GameSession {
 
       LobbyUpdateDTO endMsg =
           new LobbyUpdateDTO(
-              "Session '" + caseTitle + "' ended: " + reason, displayIds, actualIds, hostId, false);
+              "Session '" + this.caseFile.getTitle() + "' ended: " + reason, displayIds, actualIds, hostId, false);
       broadcast(endMsg, null); // Notify any remaining connected clients.
 
       // Clear associations

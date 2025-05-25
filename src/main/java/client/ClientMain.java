@@ -4,7 +4,12 @@ import common.NetworkConstants;
 
 public class ClientMain {
 
-  /** Entry point for the client application. */
+  /**
+   * Entry point for the client application.
+   * Parses optional host/port args, creates a GameClient,
+   * and directly runs its main logic loop. This method will block
+   * until the GameClient finishes its execution.
+   */
   public static void main(String[] args) {
     // Default connection settings.
     String host = NetworkConstants.DEFAULT_HOST;
@@ -19,29 +24,28 @@ public class ClientMain {
         port = Integer.parseInt(args[1]);
       } catch (NumberFormatException e) {
         System.err.println(
-            "Invalid port number provided: '" + args[1] + "'. Using default port " + port + ".");
+                "ClientMain: Invalid port number provided: '" + args[1] + "'. Using default port " + port + ".");
       }
     }
 
-    // Display startup banner.
+    // Startup banner.
     System.out.println("\n========================================");
     System.out.println("  Starting Detective Game Client...");
     System.out.println("========================================");
 
-    // Create and start the main client logic in a separate thread.
+    // Create the main client logic object.
     GameClient client = new GameClient(host, port);
-    Thread clientMainLogicThread = new Thread(client, "GameClient-MainLogic");
-    clientMainLogicThread.start();
-
-    // Wait for the client logic thread to finish.
     try {
-      clientMainLogicThread.join();
-    } catch (InterruptedException e) {
-      System.err.println("ClientMain was interrupted while waiting for GameClient to finish.");
-      Thread.currentThread().interrupt(); // Re-set interrupt status.
+      client.run();
+    } catch (Exception e) {
+      // Catch any unexpected, unhandled exceptions from GameClient.run()
+      // to prevent ClientMain from crashing silently.
+      System.err.println("ClientMain: CRITICAL UNHANDLED ERROR from GameClient.run(): " + e.getMessage());
+      e.printStackTrace();
     }
 
-    // Exit message after client logic completes.
+
+    // This line is reached only after GameClient.run() has completed.
     System.out.println("ClientMain: GameClient has finished its execution.");
   }
 }

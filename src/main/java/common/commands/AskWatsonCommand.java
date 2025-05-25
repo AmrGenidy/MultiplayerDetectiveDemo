@@ -1,13 +1,13 @@
 package common.commands;
 
 import common.dto.TextMessage;
+import common.dto.WatsonHintResponseDTO; // Import the new DTO
 import common.interfaces.GameActionContext;
 import java.io.Serial;
 
-// No need for core imports if just using context
-
 public class AskWatsonCommand extends BaseCommand {
-  @Serial private static final long serialVersionUID = 1L;
+  @Serial
+  private static final long serialVersionUID = 1L;
 
   public AskWatsonCommand() {
     super(true); // Requires case to be started
@@ -15,23 +15,24 @@ public class AskWatsonCommand extends BaseCommand {
 
   @Override
   protected void executeCommandLogic(GameActionContext context) {
-    // Get the hint or status message from the context
-    String hintResult = context.askWatsonForHint(getPlayerId());
+    WatsonHintResponseDTO watsonResponse = context.askWatsonForHint(getPlayerId());
 
-    // Check if the result indicates Watson wasn't there or unavailable
-    if (hintResult.equals("Dr. Watson is not here to offer a hint.")
-        || hintResult.equals("Dr. Watson is unavailable in this case.")
-        || hintResult.equals("Your location is unknown.")
-        || hintResult.equals("Dr. Watson's location is unknown.")) {
-      // Just send the status message
-      context.sendResponseToPlayer(getPlayerId(), new TextMessage(hintResult, false));
+    if (watsonResponse == null) { // Defensive check, context should always return an object
+      context.sendResponseToPlayer(getPlayerId(), new TextMessage("Error receiving response from Watson.", true));
       return;
     }
 
-    // If we got a real hint (or the default "no insight" message)
-    // Format and send the response to the player
-    String messageText = "Watson: \"" + hintResult + "\"";
-    context.sendResponseToPlayer(getPlayerId(), new TextMessage(messageText, false));
+    String messageContent = watsonResponse.getMessage();
+
+    if (watsonResponse.isActualHint()) {
+      String formattedHintMessage = "Watson: \"" + messageContent + "\"";
+      context.sendResponseToPlayer(getPlayerId(), new TextMessage(formattedHintMessage, false));
+    } else {
+      // It's a status message (e.g., "Dr. Watson is not here...", "Watson has no insight...")
+      // Send this message directly without the "Watson: " prefix or extra quotes,
+      // as the message from WatsonHintResponseDTO should already be user-friendly.
+      context.sendResponseToPlayer(getPlayerId(), new TextMessage(messageContent, false));
+    }
   }
 
   @Override

@@ -1,50 +1,70 @@
 package client;
 
-/**
- * ClientState Represents the different states the game client can be in. This helps manage UI (what
- * menus/prompts to show) and what actions are valid.
- */
 public enum ClientState {
   // Connection States
-  DISCONNECTED, // Not connected, or connection lost and not retrying.
-  CONNECTING, // Actively trying initial connection.
-  RECONNECTING, // Actively trying to reconnect after a drop.
+  DISCONNECTED(true),              // User can type 'connect' or 'quit'
+  CONNECTING(false),               // Waits for connection
+  RECONNECTING(false),             // Waits for reconnection
 
-  // Lobby / Main Menu States (after successful connection)
-  CONNECTED_IDLE, // At the main menu: Host, Join, etc.
+  // Lobby / Main Menu States
+  CONNECTED_IDLE(true),            // Main menu, interactive
 
-  // Hosting Game Flow
-  SELECTING_HOST_TYPE, // Choosing: Public or Private host.
-  REQUESTING_CASE_LIST_FOR_HOST, // Waiting for server to send available cases (after selecting host
-  // type).
-  SELECTING_HOST_CASE, // Showing cases to host, user picks one.
-  SENDING_HOST_REQUEST, // Waiting for server response after sending HostGameCommand.
-  HOSTING_LOBBY_WAITING, // Host successful, lobby created, waiting for Player 2.
+  // Hosting Flow
+  SELECTING_HOST_TYPE(true),       // Interactive menu
+  REQUESTING_CASE_LIST_FOR_HOST(false), // Waits for server response
+  SELECTING_HOST_CASE(true),       // Interactive menu (after getting cases)
+  SENDING_HOST_REQUEST(false),     // Waits for server response
+  HOSTING_LOBBY_WAITING(true),     // Interactive (chat, 'exit lobby')
 
-  // Joining Game Flow
-  SELECTING_JOIN_TYPE, // Choosing: Join Public or Join Private.
-  REQUESTING_PUBLIC_GAMES, // Waiting for server to send list of public games.
-  VIEWING_PUBLIC_GAMES, // Showing public games, user picks one.
-  SENDING_JOIN_PUBLIC_REQUEST, // Waiting for server response after sending JoinPublicGameCommand.
-  ENTERING_PRIVATE_CODE, // Prompting user for a private game code.
-  SENDING_JOIN_PRIVATE_REQUEST, // Waiting for server response after sending JoinPrivateGameCommand.
+  // Joining Flow
+  SELECTING_JOIN_TYPE(true),       // Interactive menu
+  REQUESTING_PUBLIC_GAMES(false),  // Waits for server response
+  VIEWING_PUBLIC_GAMES(true),      // Interactive menu (after getting games)
+  SENDING_JOIN_PUBLIC_REQUEST(false),// Waits for server response
+  ENTERING_PRIVATE_CODE(true),     // Interactive (typing code or 'cancel')
+  SENDING_JOIN_PRIVATE_REQUEST(false),// Waits for server response
 
   // In-Session / In-Game States
-  IN_LOBBY_AWAITING_START, // Both players in session, ready for 'start case' command.
-  IN_GAME, // Case has started, actively playing.
+  IN_LOBBY_AWAITING_START(true),   // Interactive (host: 'start case', guest: 'request...', chat)
+  IN_GAME(true),                   // Fully interactive game play
 
   // Exam Flow States (primarily for host)
-  ATTEMPTING_FINAL_EXAM, // Host sent InitiateFinalExam, waiting for first question DTO.
-  ANSWERING_FINAL_EXAM_Q, // Host received a question, currently typing answer.
-  SUBMITTING_EXAM_ANSWER, // Host sent an answer, waiting for next question or results DTO.
-  VIEWING_EXAM_RESULT, // Exam results (ExamResultDTO) received and displayed. (Transient state)
-
-  // General "Waiting for Server" State (if a more generic one is needed beyond specific SENDING_*
-  // states)
-  // AWAITING_SERVER_RESPONSE, // Could be used for generic waits if specific SENDING_* states are
-  // too many.
-  // Currently, SENDING_* states serve this purpose.
+  ATTEMPTING_FINAL_EXAM(false),    // Host sent "final exam", waiting for first Question DTO
+  ANSWERING_FINAL_EXAM_Q(true),    // Host received a question, typing answer
+  SUBMITTING_EXAM_ANSWER(false),   // Host sent an answer, waiting for next Q DTO or Result DTO
+  VIEWING_EXAM_RESULT(true),       // Results displayed, user might press Enter to continue (transient state)
 
   // Terminal State
-  EXITING // Client is shutting down.
+  EXITING(false);                  // Client is shutting down, not interactive
+
+  private final boolean interactive;
+
+  ClientState(boolean isInteractive) {
+    this.interactive = isInteractive;
+  }
+
+  /**
+   * Checks if this client state is one where the user is expected
+   * to provide input via the main command prompt (not just system messages).
+   * @return true if the state is interactive, false otherwise.
+   */
+  public boolean isInteractive() {
+    return interactive;
+  }
+
+  /**
+   * Checks if this client state is primarily a "waiting" state,
+   * meaning it's not interactive and not a terminal/disconnected state
+   * where specific actions like 'connect' or 'quit' are expected.
+   * @return true if it's a waiting state.
+   */
+  public boolean isPrimarilyWaiting() {
+    // A waiting state is non-interactive AND not one of the fundamental
+    // non-connected or exiting states.
+    return !interactive &&
+            this != CONNECTING &&
+            this != RECONNECTING &&
+            this != DISCONNECTED && // DISCONNECTED is interactive (for 'connect'/'quit')
+            this != EXITING;
+  }
 }

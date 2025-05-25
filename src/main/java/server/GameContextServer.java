@@ -1,6 +1,7 @@
 package server;
 
 import Core.*;
+import Core.enums.Rank;
 import JsonDTO.CaseFile;
 import common.commands.Command;
 import common.commands.InitiateFinalExamCommand;
@@ -1035,12 +1036,12 @@ public class GameContextServer implements GameContext, GameActionContext {
             + currentExamQuestionsList.size());
 
     // ... (Update ranks, determine feedback message - this part remains the same) ...
-    String finalRankString = "Investigator";
+    String finalRankString = Core.enums.Rank.JUNIOR_INVESTIGATOR.getDisplayName(); // More robust default
     Detective hostDetective = getPlayerDetective(hostPlayerId);
     if (hostDetective != null) {
       hostDetective.setFinalExamScore(score);
       hostDetective.evaluateRank();
-      finalRankString = hostDetective.getRank();
+      finalRankString = hostDetective.getRank(); // This returns the String display name
     }
     Detective guestDetective = getPlayerDetective(player2Id);
     if (guestDetective != null) {
@@ -1066,15 +1067,8 @@ public class GameContextServer implements GameContext, GameActionContext {
               + hostDisplay
               + ". Further investigation was needed.";
 
-    ExamResultDTO resultDTO =
-        new ExamResultDTO(
-            score,
-            totalQuestions,
-            feedback,
-            finalRankString,
-            reviewableAnswersDetails // This list now only contains question and player's wrong
-            // answer
-            );
+    ExamResultDTO resultDTO = new ExamResultDTO(score, totalQuestions, feedback, finalRankString, reviewableAnswersDetails);
+
     logGameMessage(
         "EVAL_EXAM_RESULTS: Broadcasting ExamResultDTO: Score="
             + score
@@ -1144,28 +1138,48 @@ public class GameContextServer implements GameContext, GameActionContext {
   }
 
   @Override
-  public String askWatsonForHint(String playerId) {
+  public WatsonHintResponseDTO askWatsonForHint(String playerId) { // <<< MODIFIED RETURN TYPE
     Detective player = getPlayerDetective(playerId);
-    if (player == null) return "Error: Player context not found.";
-    if (watson == null) return "Dr. Watson is not available in this case.";
-    Room playerRoom = player.getCurrentRoom();
-    Room watsonRoom = watson.getCurrentRoom();
+    if (player == null) {
+      logGameMessage("askWatsonForHint: Player " + playerId + " not found in context.");
+      return new WatsonHintResponseDTO("Error: Player context not found.", false);
+    }
+    if (this.watson == null) {
+      return new WatsonHintResponseDTO("Dr. Watson is not available in this case.", false);
+    }
 
-    if (playerRoom == null || watsonRoom == null) {
-      return "Dr. Watson's location or yours is unclear.";
+    Room playerRoom = player.getCurrentRoom();
+    Room watsonRoom = this.watson.getCurrentRoom();
+
+    if (playerRoom == null) {
+      return new WatsonHintResponseDTO("Your location is unknown. Cannot determine if Watson is present.", false);
     }
+    if (watsonRoom == null) {
+      return new WatsonHintResponseDTO("Dr. Watson's location is currently unknown.", false);
+    }
+
     if (watsonRoom.getName().equalsIgnoreCase(playerRoom.getName())) {
-      String hint = watson.provideHint();
-      if (hint == null || hint.trim().isEmpty()) {
-        hint = "Dr. Watson seems to have no particular insight at the moment.";
+      String hintText = this.watson.provideHint(); // Gets the raw hint string
+
+      boolean isActualGameHint = true;
+      if (hintText == null || hintText.trim().isEmpty() ||
+              hintText.startsWith("I seem to be out of specific thoughts") ||
+              hintText.startsWith("My mind is blank") ||
+              hintText.startsWith("I'm afraid I have no specific insights")) {
+        isActualGameHint = false;
       }
-      // Add Watson's hint to journal for all players
-      addJournalEntry(
-          new JournalEntryDTO(
-              "Dr. Watson's insight: " + hint, "Dr. Watson (Shared)", System.currentTimeMillis()));
-      return "Watson: \"" + hint + "\"";
+      if (hintText == null || hintText.trim().isEmpty()){
+        hintText = "Dr. Watson ponders but offers no specific insight at the moment.";
+      }
+
+      // Journal entry for Watson's hint could be added here if desired for MP,
+      // and then broadcast. Or let AskWatsonCommand handle it (though command doesn't know display names easily).
+      // For consistency, if AskWatsonCommand adds to journal, it needs context.getPlayerDisplayName("Dr. Watson").
+      // For now, let's assume Watson's hints ARE NOT auto-journaled by this context method.
+      return new WatsonHintResponseDTO(hintText, isActualGameHint);
+    } else {
+      return new WatsonHintResponseDTO("Dr. Watson is not in this room.", false);
     }
-    return "Dr. Watson is not in this room.";
   }
 
   @Override
@@ -1372,13 +1386,13 @@ public class GameContextServer implements GameContext, GameActionContext {
     }
     Map<String, Integer> scores = new HashMap<>();
     Map<String, String> ranks = new HashMap<>();
-    if (player1Detective != null && player1Id != null) { // Check player1Id for safety
+    if(player1Detective != null && player1Id != null) {
       scores.put(player1Id, player1Detective.getFinalExamScore());
-      ranks.put(player1Id, player1Detective.getRank());
+      ranks.put(player1Id, player1Detective.getRankEnum().name()); // <<< SAVE ENUM NAME
     }
-    if (player2Detective != null && player2Id != null) { // Check player2Id for safety
+    if(player2Detective != null && player2Id != null) {
       scores.put(player2Id, player2Detective.getFinalExamScore());
-      ranks.put(player2Id, player2Detective.getRank());
+      ranks.put(player2Id, player2Detective.getRankEnum().name()); // <<< SAVE ENUM NAME
     }
     state.setPlayerScores(scores);
     state.setPlayerRanks(ranks);

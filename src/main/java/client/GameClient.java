@@ -59,85 +59,52 @@ public class GameClient implements Runnable {
 
   @Override
   public void run() {
-    this.consoleScanner = new Scanner(System.in); // Initialize scanner for the client's main thread
+    this.consoleScanner = new Scanner(System.in);
     printToConsole("Welcome, " + playerDisplayId + "!");
-    // promptForDisplayNameChange(); // Optional
-
-    // Initial connection attempt when client starts
     if (currentState.get() == ClientState.DISCONNECTED) {
-      attemptConnect(); // This will set state to CONNECTING, then CONNECTED_IDLE or RECONNECTING
+      attemptConnect();
     }
 
     while (running.get()) {
-      // --- MODIFIED Reconnection and Disconnected Logic at the start of the loop ---
       ClientState cs = currentState.get(); // Get current state once per loop
 
       if (!connected.get()) {
         if (cs == ClientState.RECONNECTING) {
           if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            // Automatic reconnect attempt is handled by handleAutomaticReconnectAttempt
-            // which includes the sleep and then calls attemptConnect.
-            // We don't want to block the main input loop with sleep here directly.
-            // The displayMenuOrPrompt will show "Reconnecting..."
-            // and isInteractiveState will be false, causing a short sleep.
-            // Let handleAutomaticReconnectAttempt be called if a timer/trigger mechanism existed.
-            // For now, the natural flow of attemptConnect failing and setting RECONNECTING
-            // will lead here, and the user might type 'connect' or 'quit'.
-            // To make it *automatic* from the loop, we'd call handleAutomaticReconnectAttempt here.
-            // Let's refine this: if in RECONNECTING, sleep and then try.
-            printToConsole(
-                "Attempting to reconnect ("
-                    + (reconnectAttempts + 1)
-                    + "/"
-                    + MAX_RECONNECT_ATTEMPTS
-                    + ")...");
-            try {
-              Thread.sleep(RECONNECT_DELAY_MS);
-            } catch (InterruptedException e) {
-              if (!running.get()) break;
-              Thread.currentThread().interrupt();
-            }
-            if (running.get() && !connected.get()) { // Check again before trying
+            printToConsole("Attempting to reconnect (" + (reconnectAttempts + 1) + "/" + MAX_RECONNECT_ATTEMPTS + ")...");
+            try { Thread.sleep(RECONNECT_DELAY_MS); } catch (InterruptedException e) { if(!running.get()) break; Thread.currentThread().interrupt(); }
+            if(running.get() && !connected.get()) {
               reconnectAttempts++;
-              attemptConnect(); // This will set state to CONNECTING
+              attemptConnect();
             }
-            continue; // Skip trying to get input for this iteration
+            continue;
           } else {
-            log("Max automatic reconnect attempts (" + MAX_RECONNECT_ATTEMPTS + ") reached.");
+            log("Max automatic reconnect attempts reached.");
             printToConsole("Failed to reconnect automatically. Server may be offline.");
-            currentState.set(ClientState.DISCONNECTED); // Shift to permanently disconnected
-            // reconnectAttempts is reset when user types 'connect' or upon successful connection
+            currentState.set(ClientState.DISCONNECTED);
+            // reconnectAttempts reset when user types 'connect'
           }
         } else if (cs != ClientState.CONNECTING && cs != ClientState.EXITING) {
-          // If not connected, not connecting, not reconnecting, and not exiting, ensure
-          // DISCONNECTED state
           currentState.set(ClientState.DISCONNECTED);
         }
       }
-      // --- END MODIFIED Reconnection Logic ---
 
-      displayMenuOrPromptForCurrentState(); // Display UI based on potentially updated state
+      // Re-fetch state as it might have changed due to reconnect logic
+      cs = currentState.get();
+      displayMenuOrPromptForCurrentState();
 
-      if (isInteractiveState(currentState.get())) {
-        String input;
+      // Use the enum's property directly
+      if (cs.isInteractive()) { // <<< MODIFIED HERE
+        String input = "";
         if (consoleScanner != null && consoleScanner.hasNextLine()) {
           input = consoleScanner.nextLine();
-        } else {
-          if (running.get()) {
-            log("Console input stream closed. Shutting down client...");
-            stopClient();
-          }
-          break;
-        }
-        if (input == null) {
-          if (running.get()) stopClient();
-          break;
-        }
+        } else { /* ... (handle scanner closed) ... */ break; }
+        if (input == null) { /* ... */ break; }
         processUserInputBasedOnState(input.trim());
       } else {
-        // In a non-interactive state (like CONNECTING, RECONNECTING, or waiting for server DTO)
+        // In a non-interactive state
         try {
-          Thread.sleep(200); // Small pause to prevent busy-waiting and allow listener to work
+          Thread.sleep(200);
         } catch (InterruptedException e) {
           if (!running.get()) break;
           Thread.currentThread().interrupt();
@@ -148,38 +115,14 @@ public class GameClient implements Runnable {
     log("Client main loop finished.");
   }
 
-  private boolean isInteractiveState(ClientState state) {
-    // Using an enhanced switch (Java 14+) makes this a bit cleaner.
-    // If on an older Java version, the original switch is fine.
-    return switch (state) {
-      case REQUESTING_CASE_LIST_FOR_HOST,
-              REQUESTING_PUBLIC_GAMES,
-              SENDING_HOST_REQUEST,
-              SENDING_JOIN_PUBLIC_REQUEST,
-              SENDING_JOIN_PRIVATE_REQUEST,
-              ATTEMPTING_FINAL_EXAM,
-              SUBMITTING_EXAM_ANSWER,
-              CONNECTING,
-              RECONNECTING ->
-          false; // These states primarily wait for server responses.
-      default -> true; // All other states are considered interactive.
-    };
-  }
-
-  private boolean isWaitingState(ClientState state) {
-    return !isInteractiveState(state)
-        && state != ClientState.EXITING
-        && state != ClientState.DISCONNECTED;
-  }
 
   private void displayMenuOrPromptForCurrentState() {
     consoleLock.lock();
     try {
       ClientState cs = currentState.get();
-      // Only print menu/prompt if consoleScanner is available and state is interactive
-      if (consoleScanner == null && isInteractiveState(cs)) {
-        return; // Cannot display prompt without scanner for interactive states
-      }
+      // Use the enum's property for checks
+      if (consoleScanner == null && cs.isInteractive()) { return; } // <<< MODIFIED HERE
+      System.out.println();
 
       System.out.println(); // Start with a newline for better separation
 
@@ -282,7 +225,10 @@ public class GameClient implements Runnable {
           printToConsole("Exiting client...");
           break;
         default: // Should ideally not be reached if all states are handled
-          System.out.print(playerDisplayId + "[" + cs.name() + "]> "); // Generic prompt
+          if (cs.isInteractive()) {
+            System.out.print(playerDisplayId + "[" + cs.name() + "]> ");
+          }
+          // If not interactive and not a specific waiting message above, it just waits.
           break;
       }
     } finally {
@@ -295,135 +241,43 @@ public class GameClient implements Runnable {
     log("PROCESS_USER_INPUT: Input='" + input + "', State=" + cs);
 
     // --- Global commands handled first and return ---
-    if (input.equalsIgnoreCase("quit")) {
-      handleQuitCommand(cs);
-      return;
+    if (input.equalsIgnoreCase("quit")) { handleQuitCommand(cs); return; }
+    if (input.toLowerCase().startsWith("/setname ")) { handleSetNameCommand(input); return; }
+    if (input.equalsIgnoreCase("cancel") && cs.isPrimarilyWaiting()) { handleCancelWaitingState(cs); return; }
+    if ((cs == ClientState.DISCONNECTED || cs == ClientState.RECONNECTING) && input.equalsIgnoreCase("connect")) {
+      this.reconnectAttempts = 0; attemptConnect(); return;
     }
-    if (input.toLowerCase().startsWith("/setname ")) {
-      handleSetNameCommand(input);
-      return;
-    }
-    if (input.equalsIgnoreCase("cancel") && isWaitingState(cs)) {
-      handleCancelWaitingState(cs);
-      return;
-    }
-    if (cs == ClientState.DISCONNECTED && input.equalsIgnoreCase("connect")) {
-      this.reconnectAttempts = 0; // Reset attempts for manual connect
-      attemptConnect();
-      return;
-    }
-    if (cs == ClientState.RECONNECTING && !input.equalsIgnoreCase("quit")) {
-      return;
-    }
+    if (cs == ClientState.RECONNECTING && !input.equalsIgnoreCase("quit")) { return; } // Ignore other input during auto-reconnect
 
     // --- State-Specific Input Handling ---
     switch (cs) {
-      case CONNECTED_IDLE:
-        handleMainMenuInput(input);
-        break;
-      case SELECTING_HOST_TYPE:
-        handleHostTypeSelection(input);
-        break;
-      case SELECTING_HOST_CASE:
-        handleHostCaseSelection(input);
-        break;
-      case HOSTING_LOBBY_WAITING:
-        handleHostingLobbyInput(input);
-        break;
-      case SELECTING_JOIN_TYPE:
-        handleJoinTypeSelection(input);
-        break;
-      case VIEWING_PUBLIC_GAMES:
-        handlePublicGameSelection(input);
-        break;
-      case ENTERING_PRIVATE_CODE:
-        handlePrivateCodeEntry(input);
-        break;
+      case CONNECTED_IDLE: handleMainMenuInput(input); break;
+      case SELECTING_HOST_TYPE: handleHostTypeSelection(input); break;
+      case SELECTING_HOST_CASE: handleHostCaseSelection(input); break;
+      case HOSTING_LOBBY_WAITING: handleHostingLobbyInput(input); break;
+      case SELECTING_JOIN_TYPE: handleJoinTypeSelection(input); break;
+      case VIEWING_PUBLIC_GAMES: handlePublicGameSelection(input); break;
+      case ENTERING_PRIVATE_CODE: handlePrivateCodeEntry(input); break;
 
       case IN_LOBBY_AWAITING_START:
       case IN_GAME:
-        CommandParserClient.ParsedCommandData parsedData = CommandParserClient.parse(input);
-        if (parsedData == null) {
-          printToConsole("Invalid command format.");
-          return; // Exit early if parsing fails
-        }
-
-        String commandName = parsedData.commandName;
-        Command commandToExecute = null;
-        boolean specialCommandHandled = false; // Flag to prevent falling into general factory
-
-        // Role-dependent commands OR commands handled differently in these states
-        if (commandName.equals("start case")) {
-          if (cs == ClientState.IN_LOBBY_AWAITING_START) {
-            if (isThisClientTheHost()) {
-              commandToExecute = new StartCaseCommand();
-            } else {
-              printToConsole("Sending request to host to start the case...");
-              commandToExecute = new RequestStartCaseCommand();
-            }
-            specialCommandHandled = true;
-          } else {
-            printToConsole(
-                "'start case' can only be used when the lobby is ready for the game to start.");
-            // No command to execute, but don't let it fall to unknown.
-            return; // Or specialCommandHandled = true; and commandToExecute remains null
-          }
-        } else if (commandName.equals("initiate final exam") || commandName.equals("final exam")) {
-          if (cs == ClientState.IN_GAME) {
-            if (isThisClientTheHost()) {
-              commandToExecute = new InitiateFinalExamCommand();
-            } else {
-              printToConsole("Sending request to host to start the final exam...");
-              commandToExecute = new RequestInitiateExamCommand();
-            }
-            specialCommandHandled = true;
-          } else {
-            printToConsole("'final exam' can only be used when a game is in progress.");
-            return; // Or specialCommandHandled = true; and commandToExecute remains null
-          }
-        }
-        // Chat is always processed by processChatOrIngameCommand which calls the factory for chat
-        // itself
-        // or handles it directly. If chat is handled by factory, no special flag needed here.
-        // If processChatOrIngameCommand handles chat then returns, it's fine.
-        // The current structure passes all non-special commands to processChatOrIngameCommand,
-        // which then calls the factory.
-
-        // If NOT a special host/guest differentiated command, let processChatOrIngameCommand handle
-        // it
-        // This includes chat AND other general in-game commands via the factory.
-        if (!specialCommandHandled) {
-          processChatOrIngameCommand(input); // This will parse again and use factory
-          return; // We are done after this, whether it found a command or not
-        }
-
-        // If it WAS a special command (start case / final exam) and commandToExecute was set:
-        if (commandToExecute != null) {
-          updateClientStateBeforeSending(commandToExecute);
-          sendToServer(commandToExecute);
-        }
-        // If specialCommandHandled was true but commandToExecute is null (e.g., guest typed 'start
-        // case' in IN_GAME state),
-        // an error message was already printed.
-        break; // Break from the switch case for IN_LOBBY_AWAITING_START / IN_GAME
+        handleInGameOrLobbyReadyInput(input, cs); // New helper for these combined states
+        break;
 
       case ANSWERING_FINAL_EXAM_Q:
         handleExamAnswerInput(input);
         break;
-
-      // ... (other states: VIEWING_EXAM_RESULT, DISCONNECTED, RECONNECTING, WAITING states) ...
       case VIEWING_EXAM_RESULT:
-        if (!input.isEmpty()) {
-          printToConsole("Returning to game...");
-        }
-        currentState.set(ClientState.IN_GAME); // Already handled by DTO
+        if (!input.isEmpty()) { printToConsole("Returning to game..."); }
+        currentState.set(ClientState.IN_GAME); // DTO handler should do this primarily
         break;
-      case DISCONNECTED:
-      case RECONNECTING:
-        if (!input.equalsIgnoreCase("connect")) {
+      case DISCONNECTED: // 'connect' and 'quit' handled by globals
+      case RECONNECTING: // 'connect' and 'quit' handled by globals
+        if (!input.equalsIgnoreCase("connect") && !input.equalsIgnoreCase("quit")) {
           printToConsole("You are not connected. Type 'connect' or 'quit'.");
         }
         break;
+      // Waiting states: 'cancel' and 'quit' handled by globals. Other input mostly ignored.
       case REQUESTING_CASE_LIST_FOR_HOST:
       case REQUESTING_PUBLIC_GAMES:
       case SENDING_HOST_REQUEST:
@@ -431,13 +285,88 @@ public class GameClient implements Runnable {
       case SENDING_JOIN_PRIVATE_REQUEST:
       case ATTEMPTING_FINAL_EXAM:
       case SUBMITTING_EXAM_ANSWER:
-        break;
-      default:
-        if (isInteractiveState(cs) && !isChatCommand(input) && !input.isEmpty()) {
-          printToConsole(
-              "Command '" + input + "' not applicable in current state: " + cs + ". Type 'help'.");
+        if (!input.equalsIgnoreCase("cancel") && !input.equalsIgnoreCase("quit") && !input.isEmpty()) {
+          // The prompt for these states already says "Waiting... (type 'cancel'...)"
         }
         break;
+      default:
+        if (cs.isInteractive() && !isChatCommand(input) && !input.isEmpty()) {
+          printToConsole("Command '" + input + "' not applicable in current state: " + cs + ". Type 'help'.");
+        }
+        break;
+    }
+  }
+
+  private void handleInGameOrLobbyReadyInput(String input, ClientState currentStateForCommand) {
+    log("H_IGOLRI: Input='" + input + "', State=" + currentStateForCommand);
+    if (isChatCommand(input)) {
+      log("H_IGOLRI: Detected chat command.");
+      processChatCommandOnly(input); // This method sends the ChatMessage
+      return;
+    }
+
+    CommandParserClient.ParsedCommandData parsedData = CommandParserClient.parse(input);
+    if (parsedData == null || parsedData.commandName == null || parsedData.commandName.isEmpty()) {
+      printToConsole("Invalid command format (parser returned null or empty command name).");
+      log("H_IGOLRI: ParsedData is null or commandName is empty.");
+      return;
+    }
+    log("H_IGOLRI: Parsed to commandName='" + parsedData.commandName + "', arg='" + parsedData.getFirstArgument() + "'");
+
+    // Now, directly use the factory. The factory contains all logic for which command to create.
+    Command commandToExecute = CommandFactoryClient.createCommand(parsedData, isThisClientTheHost(), currentStateForCommand);
+
+    if (commandToExecute != null) {
+      log("H_IGOLRI: Factory created command: " + commandToExecute.getClass().getSimpleName() + ". Sending to server.");
+      // If it's a request command (created because client is guest), print the "Sending request..." message
+      if (!isThisClientTheHost()) {
+        if (commandToExecute instanceof RequestStartCaseCommand) {
+          printToConsole("Sending request to host to start the case...");
+        } else if (commandToExecute instanceof RequestInitiateExamCommand) {
+          printToConsole("Sending request to host to start the final exam...");
+        }
+      }
+      updateClientStateBeforeSending(commandToExecute);
+      sendToServer(commandToExecute);
+    } else {
+      // Factory returned null.
+      // The factory itself might have printed a specific usage error (e.g., "Usage: move <direction>").
+      // If not, then the command is truly unknown or not valid for the context as per factory logic.
+      log("H_IGOLRI: Factory returned NULL for commandName='" + parsedData.commandName + "'.");
+      // Avoid printing "Unknown command" if factory already printed a specific error.
+      // This is hard to detect perfectly without factory returning an error code.
+      // For now, let's assume if factory returns null, it might have printed something or it's genuinely unknown.
+      // A simple check: if it's a command that *requires* an argument and arg was null, factory would have printed.
+      boolean factoryLikelyPrintedError = false;
+      String cmd = parsedData.commandName;
+      String arg = parsedData.getFirstArgument();
+      if ((cmd.equals("move") || cmd.equals("examine") || cmd.equals("question") ||
+              cmd.equals("journal add") || cmd.equals("deduce") || cmd.equals("/setname") ||
+              cmd.equals("host game") || cmd.equals("join public game") || cmd.equals("join private game") ||
+              cmd.equals("submit exam answer")) && (arg == null || arg.isEmpty())) {
+        factoryLikelyPrintedError = true;
+      }
+      // Also, if factory rejected "start case" or "final exam" due to wrong state.
+      if ((cmd.equals("start case") || cmd.equals("initiate final exam") || cmd.equals("final exam")) &&
+              CommandFactoryClient.createCommand(parsedData,isThisClientTheHost(),currentStateForCommand) == null ) {
+        // if the factory would return null for this specific command due to state/role, it would have printed.
+        // This check is a bit circular here though.
+        // The factory's System.err.println for state mismatches is the key.
+      }
+
+
+      // If we are reasonably sure the factory didn't print a specific reason for returning null:
+      // This part needs careful thought. If factory prints for state issues, we don't want to double print.
+      // For now, let's assume the factory IS printing for state issues for start case/final exam.
+      // And for missing args. So, if it's null, it's either because of those or truly unknown.
+      // The client will see the System.err.println from factory.
+      // If commandName is valid but factory returned null for other reasons (e.g. internal factory bug)
+      // then the generic unknown is fine.
+      // The factory *should not* print "Unknown command". It should print specific errors or return null.
+      // The GameClient then prints the generic "Unknown command".
+      if (!factoryLikelyPrintedError) { // This condition is imperfect.
+        printToConsole("Unknown command: '" + parsedData.commandName + "' or not applicable now. Type 'help'.");
+      }
     }
   }
 
@@ -480,15 +409,31 @@ public class GameClient implements Runnable {
   }
 
   private void handleSetNameCommand(String input) {
-    String newName =
-        input.substring("/setname ".length()).trim(); // Assumes input starts with "/setname "
-    if (!newName.isEmpty() && newName.length() < 25) { // Basic validation
-      this.playerDisplayId = newName; // Update locally immediately for prompt
+    // This is a global command, so it doesn't strictly depend on IN_GAME or LOBBY state
+    // for creation, but does for server processing.
+    CommandParserClient.ParsedCommandData parsedData = CommandParserClient.parse(input); // input is like "/setname NewName"
+    if (parsedData == null || !parsedData.commandName.equals("/setname") || parsedData.getFirstArgument() == null || parsedData.getFirstArgument().isEmpty()) {
+      printToConsole("Usage: /setname <new_display_name>");
+      return;
+    }
+
+    String newName = parsedData.getFirstArgument();
+    if (newName.length() < 25 && newName.length() > 0) { // Basic validation
+      String oldLocalDisplayName = this.playerDisplayId;
+      this.playerDisplayId = newName;
       printToConsole("Display name changed locally to: " + this.playerDisplayId);
 
-      // Send update to server
       if (connected.get()) {
-        sendToServer(new UpdateDisplayNameCommand(new UpdateDisplayNameRequestDTO(newName)));
+        // Create command via factory (factory now handles /setname)
+        Command setNameCmd = CommandFactoryClient.createCommand(parsedData, isThisClientTheHost(), currentState.get());
+        if (setNameCmd != null) { // Should not be null if parser and factory are aligned
+          sendToServer(setNameCmd);
+        } else {
+          // Should not happen if parser creates ParsedCommandData correctly for /setname
+          logError("Failed to create UpdateDisplayNameCommand for /setname " + newName, null);
+          this.playerDisplayId = oldLocalDisplayName; // Revert optimistic update
+          printToConsole("Error sending name change to server.");
+        }
       } else {
         printToConsole("Not connected to server. Name change is local only for now.");
       }
@@ -559,11 +504,6 @@ public class GameClient implements Runnable {
     }
   }
 
-  // Modify RequestCaseListCommand to carry the public/private intent
-  // public RequestCaseListCommand(boolean forPublicHosting) { this.forPublicHosting =
-  // forPublicHosting; ... }
-  // And a getter. GameClient needs a field `private boolean intentToHostPublic;` to store this.
-
   private void handleHostCaseSelection(String input) {
     if (input.equals("0")) {
       currentState.set(ClientState.SELECTING_HOST_TYPE);
@@ -609,7 +549,7 @@ public class GameClient implements Runnable {
     }
   }
 
-  private boolean intentToHostPublic; // Add this field to GameClient
+  private boolean intentToHostPublic;
 
   private void handleJoinTypeSelection(String input) {
     switch (input) {
@@ -680,11 +620,11 @@ public class GameClient implements Runnable {
       printToConsole("Cancelling hosted game lobby...");
       sendToServer(new ExitCommand()); // Server will end the session
     } else {
-      processChatOrIngameCommand(input); // Allows chat
+      processChatCommandOnly(input); // Allows chat
     }
   }
 
-  // Inside client.GameClient.java
+
   private void handleExamAnswerInput(
       String inputAnswer) { // inputAnswer is what the user typed, e.g., "sad"
     if (inputAnswer.isEmpty()) {
@@ -711,36 +651,18 @@ public class GameClient implements Runnable {
     sendToServer(submitCmd);
   }
 
-  private void processChatOrIngameCommand(String input) {
-    // (Same as before)
-    if (input.toLowerCase().startsWith("/chat ") || input.toLowerCase().startsWith("/c ")) {
-      String chatText = input.substring(input.indexOf(" ") + 1).trim();
-      if (!chatText.isEmpty()) {
-        ChatMessage chatMsg =
-            new ChatMessage(this.playerDisplayId, chatText, System.currentTimeMillis());
-        sendToServer(chatMsg);
-      } else {
-        printToConsole("Usage: /chat <message>  OR  /c <message>");
-      }
-      return;
-    }
-
-    CommandParserClient.ParsedCommandData parsedData = CommandParserClient.parse(input);
-    if (parsedData == null) {
-      printToConsole("Invalid command format.");
-      return;
-    }
-    Command command = CommandFactoryClient.createCommand(parsedData);
-    if (command != null) {
-      updateClientStateBeforeSending(command);
-      sendToServer(command);
+  private void processChatCommandOnly(String input) {
+    // Assumes isChatCommand(input) was true
+    String chatText = input.substring(input.indexOf(" ") + 1).trim();
+    if (!chatText.isEmpty()) {
+      ChatMessage chatMsg =
+              new ChatMessage(this.playerDisplayId, chatText, System.currentTimeMillis());
+      sendToServer(chatMsg);
     } else {
-      printToConsole("Unknown command: '" + parsedData.commandName + "'. Type 'help'.");
+      printToConsole("Usage: /chat <message>  OR  /c <message>");
     }
   }
 
-  // --- DTO Handlers (Ensure they update currentState and preWaitingState correctly) ---
-  // Inside GameClient.java
   private void handleAvailableCases(AvailableCasesDTO ac) {
     if (currentState.get() != ClientState.REQUESTING_CASE_LIST_FOR_HOST) {
       printToConsole(
@@ -1025,7 +947,7 @@ public class GameClient implements Runnable {
     }
   }
 
-  private void processServerMessage(Object message) { // Keep this method, DTO handlers are separate
+  private void processServerMessage(Object message) {
     consoleLock.lock();
     try {
       ClientState previousStateForErrorCheck = currentState.get();
@@ -1082,10 +1004,32 @@ public class GameClient implements Runnable {
     }
   }
 
+
+  private ClientState determineNextStateForOutgoingCommand(Command command, ClientState current) {
+    // Based on the type of command being sent, decide if the client should enter a "waiting" state.
+    if (command instanceof RequestCaseListCommand) {
+      return ClientState.REQUESTING_CASE_LIST_FOR_HOST;
+    } else if (command instanceof HostGameCommand) {
+      return ClientState.SENDING_HOST_REQUEST;
+    } else if (command instanceof ListPublicGamesCommand) {
+      return ClientState.REQUESTING_PUBLIC_GAMES;
+    } else if (command instanceof JoinPublicGameCommand) {
+      return ClientState.SENDING_JOIN_PUBLIC_REQUEST;
+    } else if (command instanceof JoinPrivateGameCommand) {
+      return ClientState.SENDING_JOIN_PRIVATE_REQUEST;
+    } else if (command instanceof InitiateFinalExamCommand) {
+      return ClientState.ATTEMPTING_FINAL_EXAM;
+    } else if (command instanceof SubmitExamAnswerCommand) {
+      return ClientState.SUBMITTING_EXAM_ANSWER;
+    }
+
+    return current;
+  }
+
   private void updateClientStateBeforeSending(Command command) {
     // Only set preWaitingState if transitioning TO a waiting state
     ClientState current = currentState.get();
-    ClientState nextState = current; // Default to no change
+    ClientState nextState = determineNextStateForOutgoingCommand(command, current);
 
     if (command instanceof RequestCaseListCommand)
       nextState = ClientState.REQUESTING_CASE_LIST_FOR_HOST;
@@ -1101,13 +1045,15 @@ public class GameClient implements Runnable {
     else if (command instanceof SubmitExamAnswerCommand)
       nextState = ClientState.SUBMITTING_EXAM_ANSWER;
 
-    if (nextState != current && isWaitingState(nextState)) { // If changing to a waiting state
-      this.preWaitingState = current; // Store the state we are coming FROM
+    if (nextState != current) {
+      if (nextState.isPrimarilyWaiting()) {
+        this.preWaitingState = current;
+        log("Transitioning from " + current + " to waiting state " + nextState + " (preWaitingState set to " + this.preWaitingState + ")");
+      } else {
+        this.preWaitingState = null;
+        log("Transitioning from " + current + " to " + nextState + " (preWaitingState cleared)");
+      }
       currentState.set(nextState);
-    } else if (nextState
-        != current) { // If changing to a non-waiting state, or from non-waiting to non-waiting
-      currentState.set(nextState);
-      this.preWaitingState = null; // No longer relevant
     }
     // If nextState is same as current, no change needed to preWaitingState or currentState
   }
@@ -1302,6 +1248,6 @@ public class GameClient implements Runnable {
   private void handleNpcMoved(NpcMovedDTO nmd) {
     // You can make this message more subtle if desired, e.g., not starting with [GAME INFO]
     // if it's considered part of normal world updates.
-    printToConsole("[GAME INFO] " + nmd.toString()); // Uses the DTO's helpful toString() method
+    //printToConsole("[GAME INFO] " + nmd.toString()); // Uses the DTO's helpful toString() method
   }
 }

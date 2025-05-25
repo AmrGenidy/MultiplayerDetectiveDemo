@@ -726,23 +726,6 @@ public class GameContextSinglePlayer implements GameContext, GameActionContext {
   }
 
   @Override
-  public String askWatsonForHint(String playerId) {
-    if (this.watson == null) return "Dr. Watson is not available in this case.";
-    if (this.currentRoom == null) return "Your location is unknown.";
-    if (this.watson.getCurrentRoom() == null) return "Dr. Watson's location is unknown.";
-
-    if (this.watson.getCurrentRoom().getName().equalsIgnoreCase(this.currentRoom.getName())) {
-      String hint = this.watson.provideHint(); // Get hint from Watson object
-      if (hint == null || hint.trim().isEmpty()) {
-        hint = "Dr. Watson seems to have no particular insight at the moment.";
-      }
-      // NO addJournalEntry, NO sendResponseToPlayer here
-      return hint; // Return just the hint text
-    }
-    return "Dr. Watson is not here to offer a hint."; // Indicate Watson not present
-  }
-
-  @Override
   public void updateNpcMovements(String triggeringPlayerId) {
     if (!caseStarted) {
       // logContextMessage("NPC Movement SKIPPED: Case not started.");
@@ -832,6 +815,43 @@ public class GameContextSinglePlayer implements GameContext, GameActionContext {
         && currentExamQuestionsList != null
         && currentQuestionIndex < currentExamQuestionsList.size();
   }
+
+  @Override
+  public WatsonHintResponseDTO askWatsonForHint(String playerId) {
+    if (this.watson == null) {
+      return new WatsonHintResponseDTO("Dr. Watson is not available in this case.", false);
+    }
+    // In SP, this.currentRoom is the player's current room.
+    if (this.currentRoom == null) {
+      return new WatsonHintResponseDTO("Your location is unknown. Cannot determine if Watson is present.", false);
+    }
+    if (this.watson.getCurrentRoom() == null) {
+      return new WatsonHintResponseDTO("Dr. Watson's location is currently unknown.", false);
+    }
+
+    if (this.watson.getCurrentRoom().getName().equalsIgnoreCase(this.currentRoom.getName())) {
+      String hintText = this.watson.provideHint(); // Gets the raw hint string
+
+      // Check if the returned hintText signifies "no real hint"
+      boolean isActualGameHint = true; // Assume it's a real hint by default
+      if (hintText == null || hintText.trim().isEmpty() ||
+              hintText.startsWith("I seem to be out of specific thoughts") || // from DoctorWatson
+              hintText.startsWith("My mind is blank") || // from DoctorWatson
+              hintText.startsWith("I'm afraid I have no specific insights")) { // from DoctorWatson
+        isActualGameHint = false;
+      }
+      // If hintText was null/empty, provide a default message
+      if (hintText == null || hintText.trim().isEmpty()){
+        hintText = "Dr. Watson ponders but offers no specific insight at the moment.";
+      }
+
+      // Do NOT add to journal here. Let AskWatsonCommand decide.
+      return new WatsonHintResponseDTO(hintText, isActualGameHint);
+    } else {
+      return new WatsonHintResponseDTO("Dr. Watson is not in this room.", false);
+    }
+  }
+
 
   public int getAwaitingQuestionNumber() {
     return isAwaitingExamAnswer() ? currentQuestionIndex + 1 : 0;
